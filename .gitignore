@@ -18,6 +18,11 @@ envs/
 *.zip
 *.exe
 
+# Тяжёлые кэши spike sorting (Этап IV): бинарные трейсы и вывод сортировщика.
+# Отчёты этапа (CSV/PNG/JSON) при этом версионируются.
+results/**/stage4/preprocessed/
+results/**/stage4/sorter_output/
+
 # ---------- ОС / IDE ----------
 .DS_Store
 Thumbs.db

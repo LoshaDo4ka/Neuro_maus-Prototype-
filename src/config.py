@@ -41,5 +41,18 @@ MOUSE_ALLEN_NWB = DATA_DIR / "mouse_allen_probe729445654.nwb"        # Allen (LF
 MOUSE_STEINMETZ_NWB = DATA_DIR / "mouse_steinmetz_ses20171031.nwb"    # Steinmetz (спайки)
 MOUSE_DECODER_MODEL = MODELS_DIR / "mouse_lr_decoder.joblib"          # обученный декодер
 
+# ---------- Этап IV: spike sorting и одиночные юниты ----------
+# Локальные NWB не содержат сырого AP, поэтому spike sorting идёт на
+# синтетической записи с известным ground truth (SpikeInterface).
+STAGE4_DIR = MOUSE_STAGE_DIR / "stage4"
+SYNTHETIC_SFREQ_HZ = 30000.0        # частота AP-полосы Neuropixels
+SYNTHETIC_DURATION_S = 30.0
+SYNTHETIC_N_CHANNELS = 16
+SYNTHETIC_N_UNITS = 12
+SYNTHETIC_FIRING_RATE_HZ = 8.0
+SYNTHETIC_NOISE_LEVEL = 8.0
+SYNTHETIC_SEED = 42
+SORTER_NAME = "spykingcircus2"      # доступен в [full] и работает на Python 3.14
+
 # Не считать метки событий заданными заранее:
 # их нужно проверить для каждого набора данных.

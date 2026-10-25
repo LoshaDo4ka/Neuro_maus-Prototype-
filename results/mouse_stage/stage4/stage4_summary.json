@@ -1,0 +1,32 @@
+{
+  "part_a": {
+    "n_channels": 16,
+    "n_ground_truth_units": 12,
+    "sorter": "spykingcircus2",
+    "n_sorted_units": 12,
+    "quality_metrics_median": {
+      "num_spikes": 237.0,
+      "firing_rate": 7.9,
+      "snr": 19.298438915967587,
+      "isi_violation": 0.0,
+      "amplitude_cutoff": NaN,
+      "presence_ratio": NaN
+    },
+    "ground_truth_performance_median": {
+      "accuracy": 1.0,
+      "recall": 1.0,
+      "precision": 1.0,
+      "miss_rate": 0.0,
+      "false_discovery_rate": 0.0
+    }
+  },
+  "part_b": {
+    "subject": "Richards",
+    "n_units": 778,
+    "n_trials": 260,
+    "median_firing_rate_hz": 0.9463537265104449,
+    "median_isi_ms": 362.66666666666936,
+    "median_isi_violation_ratio": 0.0009371053773185591,
+    "n_units_condition_sensitive_p05": 101
+  }
+}

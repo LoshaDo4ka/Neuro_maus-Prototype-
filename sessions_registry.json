@@ -1,0 +1,126 @@
+{
+  "registry_version": "1.0",
+  "project": "NeuroMouse",
+  "description": "Внутренний реестр проанализированных сессий NeuroMouse. Все значения извлечены напрямую из NWB-файлов (pynwb) и файлов результатов; ничего не додумано.",
+  "updated_at": "2026-10-26",
+  "sessions": [
+    {
+      "registry_id": "allen-719161530",
+      "session_id": "719161530",
+      "status": "analyzed",
+      "source": {
+        "archive": "Allen Brain Observatory",
+        "dandiset": "000021",
+        "modality": "Neuropixels extracellular LFP"
+      },
+      "file": "data/mouse_allen_probe729445654.nwb",
+      "file_size_bytes": 71781159,
+      "session_start_time": "2019-01-08T16:25:16-08:00",
+      "institution": "Allen Institute for Brain Science",
+      "session_description": "LFP data and associated channel info for a single Ecephys probe",
+      "subject": {
+        "subject_id": "703279277",
+        "species": "Mus musculus",
+        "sex": "M",
+        "age": "P122D",
+        "genotype": "Sst-IRES-Cre/wt;Ai32(RCL-ChR2(H134R)_EYFP)/wt"
+      },
+      "probe": {
+        "probe_id": "729445654",
+        "device": "probeD",
+        "n_electrodes": 96,
+        "acquisition": ["probe_729445654_lfp", "probe_729445654_lfp_data"],
+        "electrode_brain_structure_counts": {
+          "CA1": 24,
+          "VISl": 21,
+          "CA3": 17,
+          "unlabeled": 16,
+          "grey": 11,
+          "VL": 5,
+          "CA2": 2
+        }
+      },
+      "data": {
+        "has_lfp": true,
+        "has_spikes": false,
+        "n_units": 0,
+        "n_trials": 0,
+        "lfp_sampling_rate_hz": 1249.997
+      },
+      "analysis": {
+        "script": "src/mouse_lfp_analysis.py",
+        "outputs": [
+          "results/mouse_stage/mouse_lfp_traces_VISl_CA1.png",
+          "results/mouse_stage/mouse_lfp_psd_comparison.png",
+          "results/mouse_stage/mouse_electrodes_inventory.csv"
+        ]
+      },
+      "notes": "LFP-запись без отсортированных спайков (n_units = 0). Использована для сравнения внеклеточного сигнала зрительной коры (VISl) и гиппокампа (CA1)."
+    },
+    {
+      "registry_id": "steinmetz-Richards_2017-10-31",
+      "session_id": "Richards_2017-10-31",
+      "status": "analyzed",
+      "source": {
+        "archive": "Steinmetz et al. (2019), Neuropixels in behaving mice",
+        "dandiset": "000017",
+        "modality": "Neuropixels spikes + поведение"
+      },
+      "file": "data/mouse_steinmetz_ses20171031.nwb",
+      "file_size_bytes": 204150135,
+      "session_start_time": "2017-10-31T12:00:00+00:00",
+      "institution": "University College London",
+      "lab": "The Carandini and Harris Lab",
+      "experimenter": "Nick Steinmetz",
+      "session_description": "Neuropixels recording during visual discrimination in awake mice.",
+      "subject": {
+        "subject_id": "Richards",
+        "species": "Mus musculus",
+        "sex": "M",
+        "age": "182 days",
+        "genotype": "C57BL/6J"
+      },
+      "probe": {
+        "devices": ["0", "1"],
+        "n_electrodes": 748,
+        "electrode_brain_structures": ["MOs", "MRN", "OLF", "ORB", "PAG", "RSP", "SCm", "SCs", "root"]
+      },
+      "data": {
+        "has_lfp": false,
+        "has_spikes": true,
+        "n_units": 778,
+        "n_trials": 260,
+        "trial_columns": [
+          "start_time",
+          "stop_time",
+          "included",
+          "go_cue",
+          "visual_stimulus_time",
+          "visual_stimulus_left_contrast",
+          "visual_stimulus_right_contrast",
+          "response_time",
+          "response_choice",
+          "feedback_time",
+          "feedback_type",
+          "rep_num"
+        ]
+      },
+      "analysis": {
+        "script": "src/mouse_spikes_decoder.py",
+        "task": "Декодирование положения зрительного стимула (Слева vs Справа) по счётчикам спайков в окне 400 мс",
+        "feature_matrix": "[196 испытаний × 778 нейронов]",
+        "decoder_metrics": [
+          {"model": "LogisticRegression", "accuracy": 0.5510204081632653, "balanced_accuracy": 0.5353448275862069},
+          {"model": "LDA", "accuracy": 0.6530612244897959, "balanced_accuracy": 0.621551724137931}
+        ],
+        "model_file": "models/mouse_lr_decoder.joblib",
+        "outputs": [
+          "results/mouse_stage/mouse_population_raster.png",
+          "results/mouse_stage/mouse_decoder_confusion_matrix.png",
+          "results/mouse_stage/mouse_decoder_metrics.csv"
+        ]
+      },
+      "notes": "Сессия со спайками и поведенческими испытаниями. Валидных испытаний для декодера — 196 из 260 (по различию контраста слева/справа)."
+    }
+  ]
+}
