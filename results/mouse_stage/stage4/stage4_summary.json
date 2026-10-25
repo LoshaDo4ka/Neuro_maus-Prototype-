@@ -7,7 +7,7 @@
     "quality_metrics_median": {
       "num_spikes": 237.0,
       "firing_rate": 7.9,
-      "snr": 19.298438915967587,
+      "snr": 19.343159137182568,
       "isi_violation": 0.0,
       "amplitude_cutoff": NaN,
       "presence_ratio": NaN
