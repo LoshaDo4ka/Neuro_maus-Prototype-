@@ -1,0 +1,20 @@
+2026-10-25 23:30:35,541 | INFO | NeuroMouse Stage 1 pipeline started.
+2026-10-25 23:30:35,541 | INFO | Input file: F:\NeuroMouse\data\S001R01.edf
+2026-10-25 23:30:35,686 | INFO | Loaded: <RawEDF | S001R01.edf, 64 x 9760 (61.0 s), ~4.8 MiB, data loaded>
+2026-10-25 23:30:35,689 | INFO | Channels=64; sfreq=160.000 Hz; duration=61.000 s
+2026-10-25 23:30:35,689 | INFO | CHECKPOINT 1: creating a copy of the raw recording.
+2026-10-25 23:30:35,691 | INFO | CHECKPOINT 2: starting 1-40 Hz FIR filtering.
+2026-10-25 23:30:54,826 | INFO | CHECKPOINT 3: filtering completed.
+2026-10-25 23:30:54,853 | INFO | CHECKPOINT 3A: saving filtered FIF.
+2026-10-25 23:30:54,882 | INFO | CHECKPOINT 3B: filtered FIF saved.
+2026-10-25 23:30:54,882 | INFO | CHECKPOINT 3C: writing channel inventory.
+2026-10-25 23:30:54,939 | INFO | CHECKPOINT 3D: channel inventory saved.
+2026-10-25 23:30:54,939 | INFO | CHECKPOINT 4A: starting feature calculation.
+2026-10-25 23:30:56,150 | INFO | CHECKPOINT 4B: feature calculation completed; rows=1856
+2026-10-25 23:30:56,306 | INFO | CHECKPOINT 4C: features CSV saved.
+2026-10-25 23:30:58,079 | INFO | CHECKPOINT 4: plots completed.
+2026-10-25 23:30:58,080 | INFO | CHECKPOINT 5: metadata saved.
+2026-10-25 23:30:58,089 | INFO | CHECKPOINT 6: report saved.
+2026-10-25 23:30:58,089 | INFO | Pipeline completed successfully.
+2026-10-25 23:30:58,089 | INFO | Output directory: F:\NeuroMouse\results\stage1
+2026-10-25 23:30:58,089 | INFO | Feature rows: 1856

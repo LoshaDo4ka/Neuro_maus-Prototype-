@@ -1,0 +1,48 @@
+{
+  "project": "NeuroMouse",
+  "stage": 1,
+  "input_file": "F:\\NeuroMouse\\data\\S001R01.edf",
+  "mne_version": "1.13.2",
+  "sampling_frequency_hz": 160.0,
+  "n_channels": 64,
+  "n_samples": 9760,
+  "duration_seconds": 61.0,
+  "filter": {
+    "type": "FIR band-pass",
+    "low_cut_hz": 1.0,
+    "high_cut_hz": 40.0,
+    "phase": "zero",
+    "fir_design": "firwin"
+  },
+  "features": {
+    "window_seconds": 4.0,
+    "step_seconds": 2.0,
+    "bands_hz": {
+      "delta": [
+        1.0,
+        4.0
+      ],
+      "theta": [
+        4.0,
+        8.0
+      ],
+      "alpha": [
+        8.0,
+        13.0
+      ],
+      "beta": [
+        13.0,
+        30.0
+      ]
+    },
+    "rows_in_features_csv": 1856,
+    "note": "Band powers are Welch PSD integrals; percentages are relative to the sum of delta/theta/alpha/beta power from 1–30 Hz."
+  },
+  "limitations": [
+    "This is a technical preprocessing prototype, not a diagnostic system.",
+    "One recording from one participant is insufficient to establish generalization.",
+    "High RMS is a quality-control flag, not proof of an artifact or pathology.",
+    "Channel positions are not used for the RMS map; its vertical axis is EDF channel order."
+  ],
+  "generated_at": "2026-10-25T23:30:58.079368+02:00"
+}

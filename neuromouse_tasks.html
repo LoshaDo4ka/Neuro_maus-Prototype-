@@ -1,0 +1,823 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NeuroMouse — Таск-менеджер</title>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      background: var(--background);
+      color: var(--foreground);
+      font-family: inherit;
+      min-height: 100vh;
+      margin: 0;
+      padding: 0;
+    }
+
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+    .stage-header {
+      cursor: pointer;
+      user-select: none;
+      transition: background 0.15s;
+    }
+    .stage-header:hover { background: var(--accent); }
+
+    .task-row {
+      transition: background 0.12s, opacity 0.2s;
+    }
+    .task-row:hover { background: color-mix(in srgb, var(--accent) 60%, transparent); }
+
+    .task-row.done td { opacity: 0.45; }
+    .task-row.done .task-label { text-decoration: line-through; }
+
+    .custom-cb {
+      appearance: none;
+      -webkit-appearance: none;
+      width: 18px; height: 18px;
+      border: 2px solid var(--border);
+      border-radius: 4px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: background 0.15s, border-color 0.15s;
+      position: relative;
+    }
+    .custom-cb:checked {
+      background: var(--primary);
+      border-color: var(--primary);
+    }
+    .custom-cb:checked::after {
+      content: '';
+      position: absolute;
+      left: 3px; top: 0px;
+      width: 5px; height: 9px;
+      border: 2px solid var(--primary-foreground);
+      border-top: none; border-left: none;
+      transform: rotate(45deg);
+    }
+
+    .progress-bar-inner {
+      transition: width 0.5s cubic-bezier(.4,0,.2,1);
+      border-radius: 9999px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 1px 8px;
+      border-radius: 9999px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+    }
+
+    .collapsible-body {
+      overflow: hidden;
+      transition: max-height 0.3s ease, opacity 0.3s ease;
+      max-height: 9999px;
+      opacity: 1;
+    }
+    .collapsible-body.collapsed {
+      max-height: 0;
+      opacity: 0;
+    }
+
+    .chevron {
+      transition: transform 0.25s;
+    }
+    .chevron.open { transform: rotate(180deg); }
+
+    .risk-badge-high { background: color-mix(in srgb, #ef4444 20%, transparent); color: #ef4444; }
+    .risk-badge-med  { background: color-mix(in srgb, #f59e0b 20%, transparent); color: #d97706; }
+    .risk-badge-resolved { background: color-mix(in srgb, #10b981 20%, transparent); color: #10b981; }
+
+    .stat-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px 18px;
+    }
+
+    .filter-btn {
+      padding: 4px 12px;
+      border-radius: 9999px;
+      font-size: 12px;
+      font-weight: 500;
+      border: 1px solid var(--border);
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+      background: transparent;
+      color: var(--muted-foreground);
+    }
+    .filter-btn.active {
+      background: var(--primary);
+      color: var(--primary-foreground);
+      border-color: var(--primary);
+    }
+
+    .tooltip-wrap { position: relative; }
+    .tooltip-box {
+      display: none;
+      position: absolute;
+      bottom: calc(100% + 6px);
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 10px;
+      font-size: 12px;
+      color: var(--foreground);
+      white-space: nowrap;
+      z-index: 50;
+      box-shadow: 0 4px 16px rgba(0,0,0,.2);
+      pointer-events: none;
+    }
+    .tooltip-wrap:hover .tooltip-box { display: block; }
+  </style>
+</head>
+<body>
+
+<div class="max-w-5xl mx-auto px-4 py-8">
+
+  <!-- HEADER -->
+  <div class="flex flex-col gap-1 mb-6">
+    <div class="flex items-center gap-3 flex-wrap">
+      <span class="text-3xl">🧠</span>
+      <h1 class="text-2xl font-bold text-[var(--foreground)]">NeuroMouse</h1>
+      <span class="badge" style="background:color-mix(in srgb,var(--primary) 18%,transparent);color:var(--primary);">Исследовательский проект</span>
+    </div>
+    <p class="text-[var(--muted-foreground)] text-sm">Двусторонний нейроинтерфейс «мозг мыши ↔ ИИ» · Никита Кукса · <code class="text-xs bg-[var(--accent)] px-1.5 py-0.5 rounded">F:\NeuroMouse</code></p>
+  </div>
+
+  <!-- STATS ROW -->
+  <div class="grid grid-cols-2 gap-3 mb-4" id="statsGrid">
+    <div class="stat-card">
+      <div class="text-xs text-[var(--muted-foreground)] mb-1">Общий прогресс</div>
+      <div class="flex items-end gap-2">
+        <span class="text-2xl font-bold text-[var(--foreground)]" id="pctText">0%</span>
+        <span class="text-xs text-[var(--muted-foreground)] mb-0.5" id="countText">0 / 0</span>
+      </div>
+      <div class="h-2 rounded-full mt-2" style="background:var(--accent)">
+        <div id="globalBar" class="progress-bar-inner h-2" style="width:0%;background:var(--primary)"></div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="text-xs text-[var(--muted-foreground)] mb-1">Текущий этап</div>
+      <div class="text-base font-semibold text-[var(--foreground)]" id="currentStage">—</div>
+      <div class="text-xs text-[var(--muted-foreground)] mt-1" id="currentStageDesc">—</div>
+    </div>
+  </div>
+
+  <!-- FILTER BAR -->
+  <div class="flex flex-wrap gap-2 mb-5" id="filterBar">
+    <button class="filter-btn active" data-filter="all" onclick="setFilter('all', this)">Все этапы</button>
+    <button class="filter-btn" data-filter="active" onclick="setFilter('active', this)">Активные</button>
+    <button class="filter-btn" data-filter="done" onclick="setFilter('done', this)">Выполненные</button>
+  </div>
+
+  <!-- STAGES -->
+  <div id="stagesContainer" class="flex flex-col gap-4"></div>
+
+  <!-- RISKS -->
+  <div class="mt-6 border border-[var(--border)] rounded-xl overflow-hidden">
+    <div class="px-4 py-3 flex items-center gap-2" style="background:color-mix(in srgb,#ef4444 10%,transparent)">
+      <span>⚠️</span>
+      <span class="font-semibold text-sm text-[var(--foreground)]">Открытые риски и вопросы</span>
+    </div>
+    <div id="risksContainer" class="divide-y divide-[var(--border)]"></div>
+  </div>
+
+  <!-- FOOTER -->
+  <div class="mt-6 text-xs text-[var(--muted-foreground)] text-center">
+    Прогресс сохраняется в браузере · Последнее обновление: <span id="lastUpdate">—</span>
+  </div>
+
+</div>
+
+<script>
+// =============================================
+// DATA
+// =============================================
+const STAGES = [
+  {
+    id: 's0',
+    icon: '📦',
+    title: 'Этап 0 — Зафиксировать исходное состояние',
+    badge: 'Завершён',
+    badgeColor: '#10b981',
+    period: 'Уже сделано',
+    budget: '0 €',
+    goal: 'Зафиксировать стартовую точку: среда, данные, первый скрипт. Результат этапа — работающий конвейер, который можно запустить повторно и получить те же числа.',
+    groups: [
+      {
+        name: 'Среда и инфраструктура',
+        tasks: [
+          { id: 's0_1',  label: 'Создать рабочую директорию F:\\NeuroMouse', done: true,
+            desc: 'Корневая папка проекта. Здесь хранятся все данные, скрипты и результаты.' },
+          { id: 's0_2',  label: 'Установить Miniforge и создать окружение neuromouse', done: true,
+            desc: 'Miniforge — менеджер пакетов на базе conda. Окружение neuromouse изолирует зависимости проекта от системного Python.' },
+          { id: 's0_3',  label: 'Установить MNE, NumPy, Pandas, SciPy, matplotlib в окружение', done: true,
+            desc: 'MNE 1.13.2 — основная библиотека для работы с ЭЭГ. NumPy/SciPy — численный анализ, Pandas — таблицы признаков, matplotlib — графики.' },
+          { id: 's0_4',  label: 'Настроить JupyterLab для интерактивного анализа', done: true,
+            desc: 'JupyterLab позволяет исследовать данные итерактивно перед написанием финального скрипта.' },
+        ]
+      },
+      {
+        name: 'Данные и скрипт',
+        tasks: [
+          { id: 's0_5',  label: 'Разместить S001R01.edf в data/', done: true,
+            desc: 'Запись из набора PhysioNet EEG Motor Movement/Imagery. 64 канала ЭЭГ, частота дискретизации 160 Гц, длительность ~61 секунда.' },
+          { id: 's0_6',  label: 'Написать neuromouse_pipeline.py с нуля', done: true,
+            desc: 'Воспроизводимый скрипт: загрузка EDF → фильтрация → расчёт признаков → сохранение CSV и PNG. Позже перемещён в единый пакет: src/eeg_pipeline.py.' },
+          { id: 's0_7',  label: 'Исправить ошибку построения PNG-графиков', done: true,
+            desc: 'Проблема была в том, что matplotlib пытался открыть GUI-окно. Решение: matplotlib.use("Agg") до импорта pyplot — отключает GUI и сохраняет файлы напрямую.' },
+          { id: 's0_8',  label: 'Убедиться, что скрипт запускается от начала до конца без ошибок', done: true,
+            desc: 'Скрипт успешно запускался и сгенерировал все выходные файлы: CSV с 1856 строками, 7 PNG-графиков, run_metadata.json, pipeline.log.' },
+        ]
+      },
+      {
+        name: 'Результаты и документация',
+        tasks: [
+          { id: 's0_9',  label: 'Сохранить резервную копию проекта (neuromouse_stage1_bundle.zip)', done: true,
+            desc: 'Архив создан 24.10.2026. Важно: бэкап нужно обновлять после каждого значимого изменения.' },
+          { id: 's0_10', label: 'Сгенерировать stage1_report.md с описанием результатов', done: true,
+            desc: 'Автоматически создаётся скриптом. Содержит: входные параметры, список выходных файлов, ограничения.' },
+          { id: 's0_11', label: 'Сохранить run_metadata.json с параметрами запуска', done: true,
+            desc: 'JSON-файл фиксирует: версию MNE, параметры фильтра, размер окна, диапазоны частот, количество строк в CSV. Это основа воспроизводимости.' },
+          { id: 's0_12', label: 'Явно перезапустить скрипт и убедиться в воспроизводимости (те же 1856 строк, те же числа)', done: true,
+            desc: 'ВЫПОЛНЕНО 25.10.2026. Скрипт успешно перезапущен, сгенерировал 1856 строк. Контрольные суммы SHA-256 всех CSV и графиков совпали бит-в-бит.' },
+        ]
+      }
+    ]
+  },
+
+  {
+    id: 's1',
+    icon: '🔬',
+    title: 'Этап I — Завершить конвейер обработки ЭЭГ',
+    badge: 'В процессе',
+    badgeColor: '#3b82f6',
+    period: '3–7 дней',
+    budget: '0 €',
+    goal: 'Получить полностью проверенный, задокументированный и воспроизводимый конвейер обработки ЭЭГ. Не переходить к ИИ, пока этот этап не завершён.',
+    groups: [
+      {
+        name: '1.1 Проверить исходную запись',
+        tasks: [
+          { id: 's1_1',  label: 'Проверить частоту дискретизации, длительность, число каналов', done: true,
+            desc: 'Результат: 160 Гц, 61 с, 64 канала EEG. Зафиксировано в run_metadata.json.' },
+          { id: 's1_2',  label: 'Проверить названия и типы каналов (EEG vs. EOG vs. misc)', done: true,
+            desc: 'Все 64 канала определены как EEG. Перечень сохранён в channel_inventory.csv.' },
+          { id: 's1_3',  label: 'Проверить амплитуду сигнала и возможные выбросы по каналам', done: true,
+            desc: 'RMS и диапазон амплитуды рассчитаны для каждого канала. channel_quality_metrics.csv, multichannel_rms_map.png.' },
+          { id: 's1_4',  label: 'Проверить аннотации и события в S001R01.edf', done: true,
+            desc: 'ВЫПОЛНЕНО 25.10.2026. Найдена ровно 1 аннотация T0 (onset=0.0s, duration=60.2s). Это подтверждает, что R01 — фоновая запись покоя (baseline eyes open). Событий движений (T1, T2) в этом файле нет.' },
+          { id: 's1_5',  label: 'Проверить наличие пропущенных данных и технических артефактов', done: false,
+            desc: 'Найти NaN, inf, нулевые участки, насыщение усилителя. Зафиксировать в отчёте о качестве.' },
+          { id: 's1_6',  label: 'Подтвердить корректность экспериментальных меток для будущего обучения', done: true,
+            desc: 'ВЫПОЛНЕНО 25.10.2026. Подтверждено: S001R01 содержит только T0 (покой). Обучение классификатора моторных паттернов по этому файлу невозможно. Для декодера (Этап III) требуются записи R03/R04 (левая/правая рука), где присутствуют метки T1 и T2.' },
+        ]
+      },
+      {
+        name: '1.2 Проверить фильтрацию',
+        tasks: [
+          { id: 's1_7',  label: 'Применить полосовой FIR-фильтр 1–40 Гц', done: true,
+            desc: 'Реализовано: firwin, zero-phase. Частоты ниже 1 Гц (дрейф) и выше 40 Гц (мышечные, сетевые помехи) подавляются.' },
+          { id: 's1_8',  label: 'Построить PSD до и после фильтрации для нескольких каналов', done: false,
+            desc: 'Визуально убедиться, что частоты выше 40 Гц действительно убраны, а диапазоны 1–40 Гц не искажены. Сравнительный график уже есть для O1, нужно расширить на несколько каналов.' },
+          { id: 's1_9',  label: 'Проверить артефакты на краях записи', done: false,
+            desc: 'FIR-фильтры могут вносить искажения ("звон") на первых и последних секундах записи. Нужно определить, стоит ли обрезать края или применять taper.' },
+          { id: 's1_10', label: 'Убедиться, что временные метки событий не смещаются после фильтрации', done: false,
+            desc: 'Zero-phase фильтр теоретически не вносит задержку, но нужно явно проверить, что временные метки аннотаций остаются корректными.' },
+        ]
+      },
+      {
+        name: '1.3 Привести расчёты к единому стандарту',
+        tasks: [
+          { id: 's1_11', label: 'Верифицировать расчёт RMS по окнам', done: true,
+            desc: 'RMS = sqrt(mean(x^2)). Рассчитан для каждого 4-секундного окна с шагом 2 с. Результат: o1_rms_by_window.csv.' },
+          { id: 's1_12', label: 'Верифицировать расчёт мощности диапазонов (Welch PSD)', done: true,
+            desc: 'Используется scipy.signal.welch. Мощность = интеграл PSD в заданном диапазоне частот. Диапазоны: δ 1–4, θ 4–8, α 8–13, β 13–30 Гц.' },
+          { id: 's1_13', label: 'Верифицировать расчёт относительной мощности', done: true,
+            desc: 'Относительная мощность альфа = P_alpha / (P_delta + P_theta + P_alpha + P_beta). База — только сумма 4 диапазонов (1–30 Гц), а не полная мощность сигнала. Это зафиксировано в run_metadata.json.' },
+          { id: 's1_14', label: 'Верифицировать расчёт частоты альфа-пика', done: true,
+            desc: 'Частота максимума PSD в диапазоне 8–13 Гц. Рассчитывается для каждого канала и каждого окна.' },
+          { id: 's1_15', label: 'Документировать формулы и единицы измерения для каждого признака', done: false,
+            desc: 'Создать явный документ (или секцию в README) с формулой, единицей измерения и ссылкой на код для каждого из признаков: RMS (мкВ), абсолютная мощность (мкВ²/Гц), относительная мощность (безразмерная, 0–1), альфа-пик (Гц).' },
+          { id: 's1_16', label: 'Проверить корректность границ временных окон и временных меток в CSV', done: false,
+            desc: 'Убедиться, что window_start и window_end в CSV соответствуют реальному содержимому окна. Особенно проверить последнее окно — не выходит ли оно за пределы записи.' },
+        ]
+      },
+      {
+        name: '1.4 Финальная верификация этапа',
+        tasks: [
+          { id: 's1_17', label: 'Перезапустить скрипт и проверить генерацию всех артефактов', done: true,
+            desc: 'ВЫПОЛНЕНО 25.10.2026. Скрипт успешно выполнен (код 0). Сгенерированы все 9 файлов результатов: FIF, 4 CSV, 4 PNG, JSON метаданных и отчет.' },
+          { id: 's1_18', label: 'Сравнить ключевые числа и хэши файлов до и после перезапуска', done: true,
+            desc: 'ВЫПОЛНЕНО 25.10.2026. SHA-256 хэши features_all_channels.csv, channel_inventory.csv, channel_quality_metrics.csv, mean_band_power_by_window.csv и всех PNG графиков совпали на 100% (бит-в-бит).' },
+          { id: 's1_19', label: 'Написать README с инструкцией по воспроизведению за 3 шага', done: true,
+            desc: 'ВЫПОЛНЕНО: neuromouse_stage1/README.md обновлён. conda activate neuromouse → python -m src.eeg_pipeline → проверить results/stage1/. Любой человек должен уметь запустить это без лишних вопросов.' },
+        ]
+      }
+    ]
+  },
+
+  {
+    id: 's2',
+    icon: '📊',
+    title: 'Этап II — Полноценный набор нейрофизиологических данных',
+    badge: 'В процессе',
+    badgeColor: '#3b82f6',
+    period: '1–2 недели',
+    budget: '0 €',
+    goal: 'Работать с реальными данными электрофизиологии мыши (Neuropixels) и сопоставлять активность нейронов со зрительными стимулами.',
+    groups: [
+      {
+        name: 'Ветка A — ЭЭГ (завершена в пользу Ветки B)',
+        tasks: [
+          { id: 's2_1', label: 'Учебный конвейер ЭЭГ закрыт (проверена воспроизводимость 100%)', done: true,
+            desc: 'Фокус проекта NeuroMouse полностью переведён на нейрофизиологию мыши (Ветка B).' },
+        ]
+      },
+      {
+        name: 'Ветка B — Электрофизиология мыши (Neuropixels)',
+        tasks: [
+          { id: 's2_6', label: 'Выбрать набор данных: Allen Brain Observatory и DANDI Archive', done: true,
+            desc: 'ВЫПОЛНЕНО 25.10.2026. Выбран стандарт NWB и архивы Allen Brain Observatory (Dandiset 000021) и Steinmetz et al. (Dandiset 000017).' },
+          { id: 's2_7', label: 'Установить pynwb и dandi в окружение neuromouse (вместо устаревшего allensdk)', done: true,
+            desc: 'ВЫПОЛНЕНО 25.10.2026. Поскольку устаревший allensdk блокирует numpy<1.24 на Python 3.12, установлены современные официальные библиотеки pynwb 4.2.0, dandi 0.81.0 и remfile.' },
+          { id: 's2_8', label: 'Скачать демонстрационные сессии Neuropixels мыши', done: true,
+            desc: 'ВЫПОЛНЕНО 25.10.2026. Скачана запись mouse_allen_probe729445654.nwb (Mus musculus, 96 электродов Neuropixels, CA1 + VISl) и сессия со спайками mouse_steinmetz_ses20171031.nwb (194 МБ).' },
+          { id: 's2_9', label: 'Загрузить и визуализировать spike times для популяции нейронов мыши', done: true,
+            desc: 'ВЫПОЛНЕНО 25.10.2026. Построен и сохранён растровый график активности 778 нейронов мыши: results/mouse_stage/mouse_population_raster.png.' },
+          { id: 's2_10', label: 'Загрузить метаданные стимулов (тип, тайминг, контрастность)', done: true,
+            desc: 'ВЫПОЛНЕНО 25.10.2026. Извлечена таблица 260 испытаний с контрастами visual_stimulus_left_contrast и visual_stimulus_right_contrast.' },
+        ]
+      },
+      {
+        name: 'База данных сессий',
+        tasks: [
+          { id: 's2_11', label: 'Создать шаблон записи для каждой проанализированной сессии', done: true,
+            desc: 'Создан модуль src/mouse_lfp_analysis.py и реестр каналов results/mouse_stage/mouse_electrodes_inventory.csv.' },
+          { id: 's2_12', label: 'Начать sessions_registry.json — внутреннюю базу данных NeuroMouse', done: false,
+            desc: 'НЕ ВЫПОЛНЕНО. Файл sessions_registry.json в проекте отсутствует. Нужно создать и зарегистрировать сессии 719161530 (Allen) и Richards_2017-10-31 (Steinmetz). Без него Этап II не закрывается.' },
+        ]
+      }
+    ]
+  },
+
+  {
+    id: 's3',
+    icon: '🤖',
+    title: 'Этап III — Первый ИИ-декодер',
+    badge: 'Завершён',
+    badgeColor: '#10b981',
+    period: 'Выполнен',
+    budget: '0 €',
+    goal: 'Использовать машинное обучение для проверки научной гипотезы: предсказание зрительного стимула мыши по вспышкам спайков популяции нейронов.',
+    groups: [
+      {
+        name: '3.1 Декодер для активности мыши (Neuropixels)',
+        tasks: [
+          { id: 's3_8',  label: 'Построить матрицу признаков: spike counts по нейронам × испытания', done: true,
+            desc: 'ВЫПОЛНЕНО 25.10.2026. Матрица X размером [196 испытаний × 778 нейронов] рассчитана в 400-мс окне после предъявления стимула.' },
+          { id: 's3_9',  label: 'Привязать испытания к условиям стимуляции (метки Y)', done: true,
+            desc: 'ВЫПОЛНЕНО 25.10.2026. Целевая переменная Y: положение доминирующего зрительного контраста (Слева vs Справа).' },
+          { id: 's3_10', label: 'Обучить baseline классификаторы (Logistic Regression & LDA)', done: true,
+            desc: 'ВЫПОЛНЕНО 25.10.2026. Модель LDA достигла 65.31% точности (Balanced Accuracy: 62.16%) на независимой тестовой выборке без утечек данных.' },
+          { id: 's3_11', label: 'Построить и сохранить матрицу ошибок декодирования', done: true,
+            desc: 'ВЫПОЛНЕНО 25.10.2026. Сохранена матрица ошибок: results/mouse_stage/mouse_decoder_confusion_matrix.png.' },
+        ]
+      },
+      {
+        name: '3.2 Сохранение моделей и валидация',
+        tasks: [
+          { id: 's3_12', label: 'Сохранить обученные модели в models/', done: true,
+            desc: 'ВЫПОЛНЕНО 25.10.2026. Обученная модель сохранена: models/mouse_lr_decoder.joblib.' },
+          { id: 's3_13', label: 'Сохранить метрики в табличном виде', done: true,
+            desc: 'ВЫПОЛНЕНО 25.10.2026. Метрики точности сохранены: results/mouse_stage/mouse_decoder_metrics.csv.' },
+          { id: 's3_14', label: 'Сформулировать научную интерпретацию результатов', done: true,
+            desc: 'ВЫПОЛНЕНО 25.10.2026. Популяция из 778 нейронов достоверно кодирует пространственное положение зрительного стимула выше случайного уровня (65.3% vs 50% chance).' },
+        ]
+      }
+    ]
+  },
+
+  {
+    id: 's4',
+    icon: '🐭',
+    title: 'Этап IV — От ЭЭГ к спайкам мыши',
+    badge: 'Не начат',
+    badgeColor: '#6b7280',
+    period: '2–6 недель',
+    budget: '0 €',
+    goal: 'Освоить анализ сырых внеклеточных сигналов, spike sorting и популяционную нейронауку — фундамент для будущей собственной регистрации.',
+    groups: [
+      {
+        name: '4.1 Сырые внеклеточные сигналы',
+        tasks: [
+          { id: 's4_1', label: 'Найти открытый набор с сырыми внеклеточными записями (формат .bin, .dat)', done: false,
+            desc: 'DANDI Archive или MEC/HC записи. Сырой сигнал отличается от уже выделенных спайков: это многоканальная непрерывная запись с частотой дискретизации 20–30 кГц.' },
+          { id: 's4_2', label: 'Визуализировать сырой LFP и HFP в разных временных масштабах', done: false,
+            desc: 'LFP (0.1–300 Гц) — медленные колебания популяции. HFP (>300 Гц) — диапазон, где видны спайки отдельных нейронов. Нужно увидеть разницу своими глазами.' },
+          { id: 's4_3', label: 'Научиться визуально различать спайки, шум и артефакты', done: false,
+            desc: 'Спайк: резкий двухфазный импульс 1–2 мс. Шум: случайные колебания без характерной формы. Артефакт движения: медленный дрейф или резкий скачок на всех каналах одновременно.' },
+        ]
+      },
+      {
+        name: '4.2 Spike Sorting с SpikeInterface',
+        tasks: [
+          { id: 's4_4', label: 'Установить SpikeInterface в окружение neuromouse', done: false,
+            desc: 'pip install spikeinterface[full]. Предоставляет единый API для 10+ алгоритмов сортировки спайков.' },
+          { id: 's4_5', label: 'Запустить сортировку на тестовой записи (Kilosort2 или MountainSort5)', done: false,
+            desc: 'Kilosort2 — GPU-ускоренный, требует CUDA (RTX 3050 подойдёт). MountainSort5 — работает на CPU, проще в установке. Начать с MountainSort5.' },
+          { id: 's4_6', label: 'Рассчитать метрики качества сортировки', done: false,
+            desc: 'ISI violations (нарушения рефрактерного периода), SNR (отношение сигнал/шум), presence_ratio (какую долю записи нейрон активен), amplitude_cutoff. SpikeInterface вычисляет всё автоматически.' },
+          { id: 's4_7', label: 'Интерпретировать результаты: что значит "хорошая" единица?', done: false,
+            desc: 'ISI violations < 0.5%, SNR > 3, presence_ratio > 0.9 — стандартные пороги. Единицы ниже порога исключаются из анализа.' },
+        ]
+      },
+      {
+        name: '4.3 Популяционная нейронаука',
+        tasks: [
+          { id: 's4_8',  label: 'Рассчитать firing rate (частоту разрядов) для каждого нейрона', done: false,
+            desc: 'Число спайков в единицу времени (спайк/с или Гц). Можно считать скользящим окном или для определённых временных интервалов.' },
+          { id: 's4_9',  label: 'Построить ISI-гистограммы (межспайковые интервалы)', done: false,
+            desc: 'ISI-распределение характеризует тип нейрона. Короткие ISI (<1 мс) — признак артефакта или слияния двух нейронов. Пик в 3–5 мс — типичный паттерн регулярно разряжающегося нейрона.' },
+          { id: 's4_10', label: 'Построить PSTH — перистимульные временные гистограммы', done: false,
+            desc: 'PSTH показывает как меняется активность нейрона вокруг момента стимула (усредняя по многим испытаниям). Стандарт нейронауки с 1960-х годов.' },
+          { id: 's4_11', label: 'Исследовать временные корреляции между нейронами', done: false,
+            desc: 'Cross-correlogram: коррелируют ли спайки нейрона A со спайками нейрона B с задержкой? Пик на нуле = синхронная активность. Пик со сдвигом = синаптическая связь?' },
+          { id: 's4_12', label: 'Сравнить популяционную активность при разных стимулах', done: false,
+            desc: 'PCA или t-SNE на матрице spike counts [n_trials × n_neurons]. Разные условия должны формировать разные кластеры в пространстве активности популяции.' },
+          { id: 's4_13', label: 'Создать отдельный модуль mouse_ephys.py для внеклеточного анализа', done: false,
+            desc: 'Отдельный переиспользуемый Python-модуль, независимый от конкретного набора данных. Функции: load_spikes(), compute_firing_rate(), plot_raster(), plot_psth().' },
+        ]
+      }
+    ]
+  },
+
+  {
+    id: 's5',
+    icon: '⚡',
+    title: 'Этап V — Собственная измерительная система',
+    badge: 'Не начат',
+    badgeColor: '#6b7280',
+    period: '1–3 месяца',
+    budget: '20–100 €',
+    goal: 'Освоить цифровую обработку сигналов с реальным железом. НЕ пытаться регистрировать биосигналы на Arduino — только учебный стенд для освоения потоковой обработки.',
+    groups: [
+      {
+        name: '5.1 Учебный измерительный стенд',
+        tasks: [
+          { id: 's5_1', label: 'Изучить возможности Arduino UNO для оцифровки сигналов', done: false,
+            desc: 'Arduino UNO: 10-бит ADC, 6 аналоговых входов, максимальная частота дискретизации ~8–9 кГц. Для ЭЭГ (160 Гц) более чем достаточно. Для электрофизиологии (20+ кГц) — нет.' },
+          { id: 's5_2', label: 'Купить Arduino Starter Kit (~15–30 €)', done: false,
+            desc: 'Включает Arduino UNO, макетную плату, резисторы, конденсаторы, датчики. Этого достаточно для учебных задач.' },
+          { id: 's5_3', label: 'Собрать тестовый генератор сигналов (RC-цепь или потенциометр)', done: false,
+            desc: 'Простая RC-цепь генерирует экспоненциально затухающий сигнал. Потенциометр — регулируемое постоянное напряжение. Оба варианта безопасны и позволяют тестировать ADC.' },
+          { id: 's5_4', label: 'Написать Python-скрипт для приёма данных по Serial порту', done: false,
+            desc: 'pyserial + threading. Arduino посылает данные с частотой 100–500 Гц, Python принимает, буферизует и обрабатывает. Задержка передачи = ?мс (нужно измерить).' },
+          { id: 's5_5', label: 'Реализовать онлайн-фильтрацию потока данных (IIR фильтр)', done: false,
+            desc: 'В отличие от offline FIR, онлайн-обработка требует IIR фильтр (butterworth). scipy.signal.sosfilt с sos-коэффициентами, вычисленными заранее.' },
+          { id: 's5_6', label: 'Измерить и задокументировать задержку от сигнала до обработанного результата', done: false,
+            desc: 'Послать тестовый импульс с известным временем, измерить когда Python его "увидел". Задержка должна быть < 100 мс для простых задач, < 10 мс для задач реального времени.' },
+        ]
+      },
+      {
+        name: '5.2 Профессиональная электрофизиологическая аппаратура (изучение)',
+        tasks: [
+          { id: 's5_7', label: 'Изучить экосистему Open Ephys: GUI, плагины, совместимое железо', done: false,
+            desc: 'Open Ephys — open-source платформа для электрофизиологии. Совместима с Neuropixels, Intan RHD/RHS, OpenBCI. Бесплатное ПО, железо от партнёров.' },
+          { id: 's5_8', label: 'Изучить требования к электродам для внеклеточной регистрации', done: false,
+            desc: 'Острый кончик ~1–10 МОм импеданса. Для одиночной записи: металлические микроэлектроды (вольфрам, платина-иридий). Для многоканальной: кремниевые зонды (Neuropixels, Cambridge NeuroTech).' },
+          { id: 's5_9', label: 'Определить тип регистрации для будущей лабораторной системы', done: false,
+            desc: 'Варианты: (A) уже выделенные спайки через синхронизацию с существующей лаборатории, (B) сырая многоканальная запись для самостоятельного spike sorting, (C) иной тип. Это решение влияет на все последующие покупки.' },
+          { id: 's5_10', label: 'Оценить совместимость Open Ephys с SpikeInterface', done: false,
+            desc: 'SpikeInterface читает форматы Open Ephys напрямую. Это позволит использовать разработанный конвейер анализа с реальными данными без изменений.' },
+        ]
+      }
+    ]
+  },
+
+  {
+    id: 's6',
+    icon: '🔁',
+    title: 'Этап VI — Замкнутый программный контур',
+    badge: 'Не начат',
+    badgeColor: '#6b7280',
+    period: '1–2 месяца',
+    budget: '0 €',
+    goal: 'Объединить регистрацию, декодирование и программный ответ в единый реального-времени цикл. Это прообраз будущего нейроинтерфейса — только в программной симуляции.',
+    groups: [
+      {
+        name: 'Архитектура контура',
+        tasks: [
+          { id: 's6_1', label: 'Спроектировать архитектуру: источник → буфер → признаки → модель → ответ', done: false,
+            desc: 'Каждый компонент — отдельный поток (thread) или процесс (process). Общий буфер с блокировкой. Фиксированный размер окна и шаг обработки.' },
+          { id: 's6_2', label: 'Реализовать симулятор потока данных (воспроизведение записи в реальном времени)', done: false,
+            desc: 'Считать сохранённую запись и "отправлять" её кусками с паузами, имитируя реальный поток. Это позволяет тестировать систему без реального железа.' },
+          { id: 's6_3', label: 'Подключить обученную модель (из Этапа III) к потоку', done: false,
+            desc: 'Загрузить модель через joblib.load(). Для каждого входящего окна: вычислить признаки → model.predict() → записать результат.' },
+          { id: 's6_4', label: 'Реализовать виртуальный ответ на результат классификации', done: false,
+            desc: 'Например: если декодировано "условие A" → изменить параметр симуляции X. Это имитирует нисходящий канал будущего интерфейса.' },
+          { id: 's6_5', label: 'Вести лог каждого цикла: время, задержка, предсказание, уверенность', done: false,
+            desc: 'structured logging в JSON Lines формате. Каждая строка = один цикл обработки. Это данные для последующего анализа качества системы.' },
+        ]
+      },
+      {
+        name: 'Тестирование и метрики',
+        tasks: [
+          { id: 's6_6', label: 'Измерить задержку обработки одного цикла (цель: <100 мс)', done: false,
+            desc: 'time.perf_counter() до и после каждого шага. Если задержка > 100 мс, система не будет работать в реальном времени при частоте 10+ Гц.' },
+          { id: 's6_7', label: 'Проверить стабильность предсказаний при зашумлённом входе', done: false,
+            desc: 'Добавить Гауссов шум к входному сигналу. Как меняется точность? При каком SNR модель перестаёт работать?' },
+          { id: 's6_8', label: 'Проверить поведение при пропуске части данных', done: false,
+            desc: 'Симулировать потерю пакетов: пропустить 10%, 30%, 50% входных окон. Система должна корректно обрабатывать такие ситуации, а не зависать.' },
+          { id: 's6_9', label: 'Создать дашборд мониторинга системы в реальном времени', done: false,
+            desc: 'matplotlib.animation или plotly dash. Отображение: текущее предсказание, история последних 10 с, частота ошибок, задержка. Для отладки и демонстрации.' },
+        ]
+      }
+    ]
+  },
+
+  {
+    id: 's7',
+    icon: '🏛️',
+    title: 'Этап VII — Лабораторная валидация',
+    badge: 'Не начат',
+    badgeColor: '#6b7280',
+    period: '3–6 месяцев',
+    budget: 'Партнёрство',
+    goal: 'Проверить разработанные алгоритмы на новых реальных данных из профильной лаборатории. Это первый выход за пределы самостоятельной разработки.',
+    groups: [
+      {
+        name: 'Поиск партнёра',
+        tasks: [
+          { id: 's7_1', label: 'Найти профильную лабораторию с электрофизиологическим оборудованием', done: false,
+            desc: 'Нейробиологические группы в университетах, институты РАН, медицинские центры. Написать email с описанием проекта и конкретным предложением о сотрудничестве.' },
+          { id: 's7_2', label: 'Определить конкретный исследовательский вопрос для совместной работы', done: false,
+            desc: 'Не "изучить мозг мыши", а конкретно: "проверить, можно ли по активности нейронов V1 декодировать ориентацию зрительного стимула с точностью выше X%".' },
+        ]
+      },
+      {
+        name: 'Техническая подготовка',
+        tasks: [
+          { id: 's7_3', label: 'Изучить оборудование лаборатории и его совместимость с конвейером', done: false,
+            desc: 'Какой формат данных? Какое ПО? Совместим ли SpikeInterface? Нужен ли адаптер для загрузки данных?' },
+          { id: 's7_4', label: 'Согласовать протокол обработки данных', done: false,
+            desc: 'Лаборатория должна одобрить: какой spike sorting использовать, какие пороги качества, как маркировать события. Это нужно зафиксировать до начала экспериментов.' },
+          { id: 's7_5', label: 'Получить необходимые разрешения (при работе с животными)', done: false,
+            desc: 'В России: решение Комиссии по биоэтике организации. В ЕС: лицензия по директиве 2010/63/EU. Без разрешения — никаких экспериментов на животных.' },
+          { id: 's7_6', label: 'Запустить собственный конвейер на новых данных из лаборатории', done: false,
+            desc: 'Первый реальный тест: работает ли код, написанный на открытых данных, на данных из другой установки? Здесь обычно появляются неожиданные проблемы.' },
+          { id: 's7_7', label: 'Сравнить результаты алгоритма с результатами лаборатории', done: false,
+            desc: 'Если лаборатория использует собственный метод анализа, сравнить его с нашим. Это валидация: правильно ли мы анализируем данные?' },
+        ]
+      }
+    ]
+  },
+
+  {
+    id: 's8',
+    icon: '🔀',
+    title: 'Этап VIII — Двусторонний нейроинтерфейс',
+    badge: 'Финальная цель',
+    badgeColor: '#8b5cf6',
+    period: 'Долгосрочно',
+    budget: 'Требует лаборатории',
+    goal: 'Работающая система: регистрация нейронных сигналов → декодирование → контролируемое обратное воздействие → верификация эффекта. Только в рамках одобренного исследования.',
+    groups: [
+      {
+        name: 'Восходящий канал (brain → AI)',
+        tasks: [
+          { id: 's8_1', label: 'Реализовать надёжную регистрацию в реальном времени с физического оборудования', done: false,
+            desc: 'Подключить реальный усилитель (Open Ephys + Intan или Neuropixels) к разработанному конвейеру. Обеспечить стабильную потоковую запись без потери данных.' },
+          { id: 's8_2', label: 'Интегрировать онлайн spike sorting в поток', done: false,
+            desc: 'Kilosort в режиме "drift correction" или онлайн-версия. Задержка spike sorting: типично 1–10 мс для уже обученной модели.' },
+          { id: 's8_3', label: 'Развернуть декодер с задержкой < 20 мс', done: false,
+            desc: 'Для замкнутого контура критична задержка. 20 мс — типичная цель для нейронных интерфейсов. Требует оптимизации конвейера обработки.' },
+        ]
+      },
+      {
+        name: 'Нисходящий канал (AI → brain)',
+        tasks: [
+          { id: 's8_4', label: 'Разработать протокол обратного воздействия (совместно с лабораторией)', done: false,
+            desc: 'Оптогенетика, электрическая микростимуляция или другой метод. Каждый имеет свои требования к оборудованию, безопасности и биоэтике.' },
+          { id: 's8_5', label: 'Верифицировать техническую безопасность и контролируемость воздействия', done: false,
+            desc: 'Перед экспериментом на животных: убедиться что параметры стимуляции (ток, длительность, частота) точно контролируются и не превышают безопасных пределов.' },
+          { id: 's8_6', label: 'Провести пилотный эксперимент с замкнутым контуром', done: false,
+            desc: 'Первый полный цикл: регистрация → декодирование → стимуляция → измерение ответа. Документировать всё детально.' },
+          { id: 's8_7', label: 'Верифицировать эффект воздействия независимыми измерениями', done: false,
+            desc: 'Доказать причинно-следственную связь: стимуляция в момент T вызвала изменение X, а не просто совпала с ним. Контрольные условия обязательны.' },
+        ]
+      }
+    ]
+  }
+];
+
+const RISKS = [
+  { level: 'resolved', icon: '✅', title: 'S001R01.edf — аннотации и условия проверены',
+    desc: 'Проверено 25.10.2026 через MNE: файл содержит ровно 1 событие T0 длительностью 60.2 с (покой, глаза открыты). Классификатор движений по нему строить нельзя — для Этапа III нужны запуски R03/R04.' },
+  { level: 'resolved', icon: '✅', title: 'Воспроизводимость подтверждена (SHA-256 проверен)',
+    desc: 'Скрипт перезапущен 25.10.2026 после переноса в src/eeg_pipeline.py: все 1856 строк признаков и SHA-256 хэши CSV-файлов совпали бит-в-бит.' },
+  { level: 'resolved', icon: '✅', title: 'Git-репозиторий настроен + .gitignore',
+    desc: 'Репозиторий инициализирован. .gitignore исключает Miniforge/, крупные данные (*.nwb, *.fif, *.npy, *.zip) и *.exe. Рабочие скрипты сведены в единый пакет src/. Осталось сделать первый коммит.' },
+  { level: 'med', icon: '🟡', title: 'sessions_registry.json не создан',
+    desc: 'Реестр сессий (задача 2.12) отсутствует, поэтому Этап II нельзя считать завершённым. Нужно создать файл и внести сессии 719161530 (Allen) и Richards_2017-10-31 (Steinmetz).' },
+  { level: 'med', icon: '🟡', title: 'Этап I не закрыт: 6 задач',
+    desc: 'Не выполнены: проверка на пропуски и техартефакты (1.5), PSD до/после для нескольких каналов (1.8), артефакты на краях записи (1.9), сдвиг меток событий после фильтрации (1.10), документация формул и единиц (1.15), проверка границ временных окон (1.16).' },
+];
+
+// =============================================
+// STATE
+// =============================================
+let doneSet = new Set();
+let currentFilter = 'all';
+
+function loadState() {
+  try {
+    const saved = localStorage.getItem('neuromouse_tasks');
+    if (saved) doneSet = new Set(JSON.parse(saved));
+  } catch(e) {}
+}
+function saveState() {
+  localStorage.setItem('neuromouse_tasks', JSON.stringify([...doneSet]));
+  localStorage.setItem('neuromouse_updated', new Date().toLocaleString('ru-RU'));
+}
+
+// =============================================
+// RENDER
+// =============================================
+function renderStages() {
+  const container = document.getElementById('stagesContainer');
+  container.innerHTML = '';
+
+  STAGES.forEach(stage => {
+    const allTasks = stage.groups.flatMap(g => g.tasks);
+    const doneCount = allTasks.filter(t => doneSet.has(t.id) || t.done).length;
+    const total = allTasks.length;
+    const pct = total ? Math.round(doneCount / total * 100) : 0;
+
+    if (currentFilter === 'done' && doneCount === 0) return;
+    if (currentFilter === 'active' && doneCount === total && total > 0) return;
+
+    const el = document.createElement('div');
+    el.className = 'border border-[var(--border)] rounded-xl overflow-hidden';
+    el.innerHTML = `
+      <div class="stage-header px-4 py-3 flex items-center gap-3" onclick="toggleStage('${stage.id}')">
+        <span class="text-xl">${stage.icon}</span>
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-2 flex-wrap">
+            <span class="font-semibold text-sm text-[var(--foreground)]">${stage.title}</span>
+            <span class="badge" style="background:${stage.badgeColor}22;color:${stage.badgeColor}">${stage.badge}</span>
+          </div>
+          <div class="flex items-center gap-3 mt-1">
+            <span class="text-xs text-[var(--muted-foreground)]">⏱ ${stage.period}</span>
+            <span class="text-xs text-[var(--muted-foreground)]">💶 ${stage.budget}</span>
+            <span class="text-xs text-[var(--muted-foreground)]">${doneCount}/${total} задач</span>
+          </div>
+        </div>
+        <div class="flex items-center gap-2 flex-shrink-0">
+          <div class="w-16 h-1.5 rounded-full" style="background:var(--accent)">
+            <div class="progress-bar-inner h-1.5" style="width:${pct}%;background:${stage.badgeColor}"></div>
+          </div>
+          <span class="text-xs font-mono text-[var(--muted-foreground)] w-8 text-right">${pct}%</span>
+          <svg class="chevron open w-4 h-4 text-[var(--muted-foreground)]" id="chev-${stage.id}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+        </div>
+      </div>
+
+      <div class="collapsible-body" id="body-${stage.id}">
+        <div class="px-4 pb-3">
+          <p class="text-xs text-[var(--muted-foreground)] border-l-2 border-[var(--border)] pl-3 py-1 mb-3">${stage.goal}</p>
+          ${renderGroups(stage)}
+        </div>
+      </div>
+    `;
+    container.appendChild(el);
+  });
+}
+
+function renderGroups(stage) {
+  return stage.groups.map(group => `
+    <div class="mb-3">
+      <div class="text-xs font-semibold text-[var(--muted-foreground)] uppercase tracking-wider mb-1 px-1">${group.name}</div>
+      <table class="w-full border-collapse">
+        <tbody>
+          ${group.tasks.map(task => renderTask(task)).join('')}
+        </tbody>
+      </table>
+    </div>
+  `).join('');
+}
+
+function renderTask(task) {
+  const isDone = doneSet.has(task.id) || task.done;
+  return `
+    <tr class="task-row ${isDone ? 'done' : ''}" id="row-${task.id}">
+      <td class="py-1.5 pr-2 w-6 align-top pt-2">
+        <input type="checkbox" class="custom-cb" ${isDone ? 'checked' : ''}
+          onchange="toggleTask('${task.id}', this)" />
+      </td>
+      <td class="py-1.5 align-top">
+        <div class="task-label text-sm text-[var(--foreground)] leading-snug">${task.label}</div>
+        <div class="text-xs text-[var(--muted-foreground)] mt-0.5 leading-relaxed">${task.desc}</div>
+      </td>
+    </tr>
+  `;
+}
+
+function renderRisks() {
+  const container = document.getElementById('risksContainer');
+  container.innerHTML = RISKS.map(r => `
+    <div class="px-4 py-3 flex gap-3">
+      <span class="text-base flex-shrink-0 mt-0.5">${r.icon}</span>
+      <div>
+        <div class="text-sm font-medium text-[var(--foreground)] mb-0.5">
+          <span class="badge mr-2 ${r.level === 'high' ? 'risk-badge-high' : r.level === 'resolved' ? 'risk-badge-resolved' : 'risk-badge-med'}">${r.level === 'high' ? 'Высокий' : r.level === 'resolved' ? 'Решено' : 'Средний'}</span>
+          ${r.title}
+        </div>
+        <div class="text-xs text-[var(--muted-foreground)] leading-relaxed">${r.desc}</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+// =============================================
+// LOGIC
+// =============================================
+function toggleTask(id, cb) {
+  const row = document.getElementById('row-' + id);
+  if (cb.checked) {
+    doneSet.add(id);
+    row.classList.add('done');
+  } else {
+    doneSet.delete(id);
+    row.classList.remove('done');
+  }
+  saveState();
+  updateStats();
+}
+
+function toggleStage(id) {
+  const body = document.getElementById('body-' + id);
+  const chev = document.getElementById('chev-' + id);
+  body.classList.toggle('collapsed');
+  chev.classList.toggle('open');
+}
+
+function setFilter(filter, btn) {
+  currentFilter = filter;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderStages();
+  updateStats();
+}
+
+function updateStats() {
+  const allTasks = STAGES.flatMap(s => s.groups.flatMap(g => g.tasks));
+  const total = allTasks.length;
+  const done = allTasks.filter(t => doneSet.has(t.id) || t.done).length;
+  const pct = total ? Math.round(done / total * 100) : 0;
+
+  document.getElementById('pctText').textContent = pct + '%';
+  document.getElementById('countText').textContent = `${done} / ${total} задач`;
+  document.getElementById('globalBar').style.width = pct + '%';
+
+  // Current stage
+  let cur = null;
+  for (const s of STAGES) {
+    const tasks = s.groups.flatMap(g => g.tasks);
+    const stageDone = tasks.filter(t => doneSet.has(t.id) || t.done).length;
+    if (stageDone < tasks.length) { cur = s; break; }
+  }
+  if (cur) {
+    document.getElementById('currentStage').textContent = cur.title;
+    document.getElementById('currentStageDesc').textContent = `${cur.period} · ${cur.budget}`;
+  } else {
+    document.getElementById('currentStage').textContent = '🎉 Все этапы выполнены!';
+    document.getElementById('currentStageDesc').textContent = '';
+  }
+
+  const upd = localStorage.getItem('neuromouse_updated') || '—';
+  document.getElementById('lastUpdate').textContent = upd;
+}
+
+// =============================================
+// INIT
+// =============================================
+loadState();
+renderStages();
+renderRisks();
+updateStats();
+</script>
+</body>
+</html>

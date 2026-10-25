@@ -1,0 +1,25 @@
+# ---------- Python ----------
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# ---------- Виртуальные окружения / дистрибуция conda ----------
+# Miniforge установлен внутри папки проекта — в репозиторий не попадает
+Miniforge/
+envs/
+
+# ---------- Крупные данные и артефакты (не версионируются) ----------
+*.nwb
+*.fif
+*.npy
+*.zip
+*.exe
+
+# ---------- ОС / IDE ----------
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
