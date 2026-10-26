@@ -126,9 +126,9 @@
 | 3.1.1 | Построить матрицу признаков: spike counts [trials × neurons] | ✅ | **25.10.2026:** $X \in \mathbb{R}^{196 \times 778}$ в 400-мс окне |
 | 3.1.2 | Привязать испытания к условиям стимуляции (метки Y) | ✅ | **25.10.2026:** Зрительный контраст слева vs справа |
 | 3.1.3 | Обучить базовые классификаторы (Logistic Regression & LDA) | ✅ | **LDA 65.31% точности** (Balanced Acc: 62.16%), LogReg 55.10% — на отложенном тесте |
-| 3.1.4 | Построить и сохранить матрицу ошибок (Confusion Matrix) | ✅ | `mouse_decoder_confusion_matrix.png` |
+| 3.1.4 | Построить и сохранить матрицу ошибок (Confusion Matrix) | ✅ | `mouse_decoder_confusion_matrix.png` (по предсказаниям лучшей модели — LDA) |
 | 3.1.5 | Построить растровый график популяции нейронов (Raster plot) | ✅ | `mouse_population_raster.png` |
-| 3.1.6 | Сохранить обученную модель и метрики | ✅ | `models/mouse_lr_decoder.joblib` и `mouse_decoder_metrics.csv` |
+| 3.1.6 | Сохранить обученную модель и метрики | ✅ | `models/mouse_lda_decoder.joblib` (лучшая модель — LDA) и `mouse_decoder_metrics.csv` |
 | 3.1.7 | Научная интерпретация | ✅ | 778 нейронов мыши достоверно кодируют положение стимула выше случайного уровня (65.3% vs 50%) |
 
 ---
@@ -141,7 +141,7 @@
 |---|--------|--------|
 | 4.1 | Изучить структуру сырой внеклеточной записи | ✅ **26.10.2026:** Allen LFP (96 кан., 1250 Гц) и Steinmetz (778 юнитов, 260 триалов); сырого AP-напряжения в локальных NWB нет |
 | 4.2 | Научиться различать спайки, шум и артефакты визуально | ✅ `stage4_raw_traces.png` — шум, спайк крупным планом, артефакт |
-| 4.3 | Установить SpikeInterface | ✅ spikeinterface 0.105.1 (`pip install spikeinterface[full]`) |
+| 4.3 | Установить SpikeInterface | ✅ spikeinterface 0.105.3 (`pip install spikeinterface[full]`) |
 | 4.4 | Запустить spike sorting на открытой записи | ✅ spykingcircus2 на синтетике (16 кан., 12 юнитов, 30 с, 30 кГц) → 12 юнитов |
 | 4.5 | Оценить качество сортировки (ISI violations, SNR, пропуски) | ✅ exact match с ground truth: accuracy/recall/precision = 1.0; медиана SNR ≈ 19.3; ISI-нарушения = 0 |
 | 4.6 | Рассчитать firing rate для каждой единицы | ✅ `single_unit_firing_rates.csv`; медиана 0.95 Гц (778 юнитов) |

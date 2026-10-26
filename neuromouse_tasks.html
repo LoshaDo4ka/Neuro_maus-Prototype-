@@ -401,7 +401,7 @@ const STAGES = [
         name: '3.2 Сохранение моделей и валидация',
         tasks: [
           { id: 's3_12', label: 'Сохранить обученные модели в models/', done: true,
-            desc: 'ВЫПОЛНЕНО 25.10.2026. Обученная модель сохранена: models/mouse_lr_decoder.joblib.' },
+            desc: 'ВЫПОЛНЕНО 25.10.2026. Сохранена лучшая модель (LDA): models/mouse_lda_decoder.joblib.' },
           { id: 's3_13', label: 'Сохранить метрики в табличном виде', done: true,
             desc: 'ВЫПОЛНЕНО 25.10.2026. Метрики точности сохранены: results/mouse_stage/mouse_decoder_metrics.csv.' },
           { id: 's3_14', label: 'Сформулировать научную интерпретацию результатов', done: true,
@@ -436,7 +436,7 @@ const STAGES = [
         name: '4.2 Spike Sorting с SpikeInterface',
         tasks: [
           { id: 's4_4', label: 'Установить SpikeInterface в окружение neuromouse', done: true,
-            desc: 'ВЫПОЛНЕНО 26.10.2026. spikeinterface 0.105.1 (pip install spikeinterface[full]), probeinterface, neo.' },
+            desc: 'ВЫПОЛНЕНО 26.10.2026. spikeinterface 0.105.3 (pip install spikeinterface[full]), probeinterface, neo.' },
           { id: 's4_5', label: 'Запустить сортировку на тестовой записи (Kilosort2 или MountainSort5)', done: true,
             desc: 'ВЫПОЛНЕНО 26.10.2026. Использован sorter spykingcircus2 (CPU) на синтетике 16 кан./12 юнитов/30 с/30 кГц → найдено 12 юнитов.' },
           { id: 's4_6', label: 'Рассчитать метрики качества сортировки', done: true,

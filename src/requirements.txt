@@ -1,8 +1,35 @@
-﻿numpy
-scipy
-pandas
-matplotlib
-scikit-learn
-mne
+# NeuroMouse — зависимости окружения `neuromouse` (Python 3.12).
+# Версии зафиксированы по фактически рабочей сборке проекта.
+
+# --- Базовые вычисления и визуализация ---
+numpy==2.5.4
+scipy==1.18.1
+pandas==3.1.0
+matplotlib==3.11.2
+
+# --- Машинное обучение (Этап III) ---
+scikit-learn==1.9.1
+joblib==1.6.0
+
+# --- Обработка ЭЭГ (Этап I) ---
+mne==1.13.2
+
+# --- Внеклеточная электрофизиология и spike sorting (Этап IV) ---
+spikeinterface[full]==0.105.3
+probeinterface==0.4.2
+neo==0.14.6
+
+# --- NWB / открытые нейрофизиологические данные (Этапы II–III) ---
+pynwb==4.2.0
+hdmf==6.2.0
+h5py==3.16.0
+dandi==0.81.0
+remfile==0.1.15
+
+# --- Ограничение zarr ---
+# SpikeInterface 0.105.3 требует zarr 2.x: zarr 3.x вызывает сбои сортировщиков.
+zarr==2.18.7
+
+# --- Интерактивная работа (разведка, отчёты) ---
 jupyterlab
 ipykernel

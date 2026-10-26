@@ -22,7 +22,7 @@
 | `src/mouse_spikes_decoder.py` | ИИ-декодер по спайкам мыши (Этап III). |
 | `src/mouse_extracellular_analysis.py` | Spike sorting и популяционный анализ (Этап IV). |
 | `data/` | Исходные записи (`S001R01.edf`, `*.nwb`). В git не версионируются. |
-| `models/` | Обученные модели (`mouse_lr_decoder.joblib`). |
+| `models/` | Обученные модели (`mouse_lda_decoder.joblib`). |
 | `results/stage1/` | Выходные файлы ЭЭГ-конвейера. |
 | `results/mouse_stage/` | Результаты анализа и декодера мыши. |
 | `results/mouse_stage/stage4/` | Результаты spike sorting и популяционного анализа. |

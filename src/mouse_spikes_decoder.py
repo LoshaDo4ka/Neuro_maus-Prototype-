@@ -161,8 +161,8 @@ def main():
         b_acc_lda = balanced_accuracy_score(y_test, y_pred_lda)
         print(f"LDA — Accuracy: {acc_lda*100:.2f}%, Balanced Accuracy: {b_acc_lda*100:.2f}%")
 
-        # 9. Plot Confusion Matrix
-        cm = confusion_matrix(y_test, y_pred_lr)
+        # 9. Plot Confusion Matrix (for the best model — LDA)
+        cm = confusion_matrix(y_test, y_pred_lda)
         fig, ax = plt.subplots(figsize=(6, 5))
         im = ax.imshow(cm, cmap="Blues")
         ax.set_xticks([0, 1])
@@ -171,7 +171,7 @@ def main():
         ax.set_yticklabels(class_names)
         ax.set_xlabel("Предсказание модели ИИ")
         ax.set_ylabel("Реальный стимул мыши")
-        ax.set_title(f"Матрица ошибок ИИ-декодера\nТочность: {acc_lr*100:.1f}%")
+        ax.set_title(f"Матрица ошибок ИИ-декодера (LDA)\nТочность: {acc_lda*100:.1f}%")
         for r in range(2):
             for c in range(2):
                 ax.text(c, r, str(cm[r, c]), ha="center", va="center", color="black" if cm[r, c] < cm.max()/2 else "white", fontsize=14, fontweight="bold")
@@ -185,7 +185,7 @@ def main():
         # 10. Save trained model & metadata
         model_save_path = MOUSE_DECODER_MODEL
         model_save_path.parent.mkdir(parents=True, exist_ok=True)
-        joblib.dump(lr, model_save_path)
+        joblib.dump(lda, model_save_path)
         print(f"Saved trained decoder model to: {model_save_path}")
 
         # Save metrics summary

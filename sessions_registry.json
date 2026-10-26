@@ -113,7 +113,7 @@
           {"model": "LogisticRegression", "accuracy": 0.5510204081632653, "balanced_accuracy": 0.5353448275862069},
           {"model": "LDA", "accuracy": 0.6530612244897959, "balanced_accuracy": 0.621551724137931}
         ],
-        "model_file": "models/mouse_lr_decoder.joblib",
+        "model_file": "models/mouse_lda_decoder.joblib",
         "outputs": [
           "results/mouse_stage/mouse_population_raster.png",
           "results/mouse_stage/mouse_decoder_confusion_matrix.png",

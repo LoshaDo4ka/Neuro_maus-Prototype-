@@ -39,7 +39,7 @@ FREQUENCY_BANDS = {
 # ---------- Этапы II–III: электрофизиология мыши (Neuropixels) ----------
 MOUSE_ALLEN_NWB = DATA_DIR / "mouse_allen_probe729445654.nwb"        # Allen (LFP: CA1 + VISl)
 MOUSE_STEINMETZ_NWB = DATA_DIR / "mouse_steinmetz_ses20171031.nwb"    # Steinmetz (спайки)
-MOUSE_DECODER_MODEL = MODELS_DIR / "mouse_lr_decoder.joblib"          # обученный декодер
+MOUSE_DECODER_MODEL = MODELS_DIR / "mouse_lda_decoder.joblib"         # лучший декодер (LDA)
 
 # ---------- Этап IV: spike sorting и одиночные юниты ----------
 # Локальные NWB не содержат сырого AP, поэтому spike sorting идёт на
@@ -52,7 +52,7 @@ SYNTHETIC_N_UNITS = 12
 SYNTHETIC_FIRING_RATE_HZ = 8.0
 SYNTHETIC_NOISE_LEVEL = 8.0
 SYNTHETIC_SEED = 42
-SORTER_NAME = "spykingcircus2"      # доступен в [full] и работает на Python 3.14
+SORTER_NAME = "spykingcircus2"      # доступен в [full]; требует zarr 2.x (Python 3.12)
 
 # Не считать метки событий заданными заранее:
 # их нужно проверить для каждого набора данных.
