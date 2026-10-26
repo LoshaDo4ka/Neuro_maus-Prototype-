@@ -1,0 +1,4 @@
+model,best_params,best_balanced_accuracy,n_combinations
+SVM_RBF,"{""clf__C"": 10.0, ""clf__gamma"": 0.001}",0.7445652173913043,9
+LogReg,"{""clf__C"": 0.01}",0.7612318840579709,4
+LDA,"{""clf__shrinkage"": 0.9}",0.775090579710145,6

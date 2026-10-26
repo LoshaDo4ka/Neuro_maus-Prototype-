@@ -1,4 +1,4 @@
-﻿"""NeuroMouse — единая конфигурация проекта.
+"""NeuroMouse — единая конфигурация проекта.
 
 Все пути и параметры обработки собраны здесь. Рабочие скрипты
 (src/eeg_pipeline.py, src/mouse_lfp_analysis.py, src/mouse_spikes_decoder.py)

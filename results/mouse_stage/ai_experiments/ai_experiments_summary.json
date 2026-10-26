@@ -1,0 +1,50 @@
+{
+  "session": "Richards_2017-10-31",
+  "subject": "Richards",
+  "n_units": 778,
+  "n_trials": 260,
+  "main_window_ms": 400,
+  "n_splits": 5,
+  "regions": {
+    "MOs": 122,
+    "MRN": 43,
+    "OLF": 12,
+    "ORB": 218,
+    "PAG": 67,
+    "RSP": 99,
+    "SCm": 72,
+    "SCs": 116,
+    "root": 29
+  },
+  "best_model_accuracy": {
+    "target": "feedback",
+    "model": "LDA",
+    "accuracy": 0.9961538461538462
+  },
+  "best_hyperparameters": {
+    "SVM_RBF": "{\"clf__C\": 10.0, \"clf__gamma\": 0.001}",
+    "LogReg": "{\"clf__C\": 0.01}",
+    "LDA": "{\"clf__shrinkage\": 0.9}"
+  },
+  "best_window_stimulus": {
+    "window_ms": 1200,
+    "model": "LDA",
+    "accuracy": 0.888076923076923
+  },
+  "best_window_choice": {
+    "window_ms": 800,
+    "model": "LDA",
+    "accuracy": 0.9712605042016806
+  },
+  "best_window_feedback": {
+    "window_ms": 800,
+    "model": "LDA",
+    "accuracy": 1.0
+  },
+  "unit_analysis": {
+    "n_units": 778,
+    "n_significant_fdr": 31,
+    "fraction_significant": 0.03984575835475578,
+    "top_region": "SCm"
+  }
+}
