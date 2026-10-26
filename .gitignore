@@ -28,3 +28,6 @@ results/**/stage4/sorter_output/
 Thumbs.db
 .vscode/
 .idea/
+
+# Временные/lock-файлы Microsoft Office (создаются при открытии документа в Word)
+~$*
