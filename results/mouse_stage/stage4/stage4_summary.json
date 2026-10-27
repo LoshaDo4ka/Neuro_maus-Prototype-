@@ -3,11 +3,11 @@
     "n_channels": 16,
     "n_ground_truth_units": 12,
     "sorter": "spykingcircus2",
-    "n_sorted_units": 12,
+    "n_sorted_units": 11,
     "quality_metrics_median": {
-      "num_spikes": 237.0,
-      "firing_rate": 7.9,
-      "snr": 19.343159137182568,
+      "num_spikes": 239.0,
+      "firing_rate": 7.966666666666667,
+      "snr": 20.86100893188328,
       "isi_violation": 0.0,
       "amplitude_cutoff": NaN,
       "presence_ratio": NaN
