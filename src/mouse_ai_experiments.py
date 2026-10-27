@@ -30,6 +30,12 @@ C. Свип окна и целевой переменной (e4). Как мен�
 D. Углублённый анализ юнитов (e5). Попарные Welch t-тесты «стимул слева/справа»
    для каждого нейрона с FDR-поправкой Бенджамини–Хохберга, разбивка значимых
    юнитов по структурам мозга (из electrodes.location) и PCA популяционного отклика.
+E. Временные бины и честная оценка (e6). Базовый признак — один счётчик спайков
+   в окне — теряет временную структуру отклика. Раскладываем окно на бины
+   ([нейроны × бины]) и сравниваем с «суммой» в одном протоколе. Оценка строгая:
+   nested CV (отбор нейронов и shrinkage подбираются только внутри обучения),
+   RepeatedStratifiedKFold (5×10 фолдов вместо одного прогона) и permutation-тест
+   (1000 перестановок) — чтобы отличить «выше случая» от «значимо выше случая».
 
 Метрики
 -------
@@ -49,15 +55,21 @@ D. Углублённый анализ юнитов (e5). Попарные Welch
   ai_region_stats.csv              — агрегация по структурам мозга (e5)
   ai_unit_fdr.png                  — вулкан-график отклика юнитов (e5)
   ai_pca_population.png            — PCA популяционного отклика (e5)
+  ai_nested_cv.csv                 — пофолдовая точность конфигураций признаков (e6)
+  ai_repeated_cv.csv               — 50 значений balanced accuracy (e6)
+  ai_permutation.json / _null.npy  — permutation-тест (e6)
+  ai_honest_evaluation.png         — сводка честной оценки (e6)
   ai_experiments_summary.json      — сводка параметров и ключевых результатов
 
 Запуск из корня проекта (окружение neuromouse):
-    python -m src.mouse_ai_experiments
+    python -m src.mouse_ai_experiments            # все разделы A–E
+    python -m src.mouse_ai_experiments E          # только честная оценка (быстро)
 """
 
 import json
 import os
 import tempfile
+import warnings
 from pathlib import Path
 
 # Кэш matplotlib — в записываемую временную папку песочницы.
@@ -71,6 +83,12 @@ for _v in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS",
            "NUMEXPR_NUM_THREADS", "LOKY_MAX_CPU_COUNT"):
     os.environ.setdefault(_v, "1")
 
+# У юнитов без спайков признак константен, и f_classif на каждом фолде ругается
+# на это (плюс деление на ноль). В перестановочном тесте таких вызовов тысячи,
+# а предупреждения пишутся в лог и заметно тормозят прогон.
+warnings.filterwarnings("ignore", message="Features .* are constant")
+warnings.filterwarnings("ignore", message="invalid value encountered in divide")
+
 import matplotlib
 
 matplotlib.use("Agg")
@@ -83,8 +101,11 @@ from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.ensemble import HistGradientBoostingClassifier, RandomForestClassifier
 from sklearn.feature_selection import SelectKBest, f_classif, mutual_info_classif
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import balanced_accuracy_score, f1_score
-from sklearn.model_selection import GridSearchCV, StratifiedKFold, cross_validate
+from sklearn.metrics import accuracy_score, balanced_accuracy_score, f1_score
+from sklearn.base import BaseEstimator, TransformerMixin
+from sklearn.model_selection import (GridSearchCV, RepeatedStratifiedKFold,
+                                     StratifiedKFold, cross_val_score,
+                                     cross_validate, permutation_test_score)
 from sklearn.neural_network import MLPClassifier
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
@@ -105,6 +126,23 @@ MAIN_WINDOW_S = 0.4                # основное окно интегрир�
 WINDOW_GRID = [0.05, 0.1, 0.2, 0.3, 0.4, 0.6, 0.8, 1.0, 1.2, 1.5]   # свип окна (e4)
 TOP_K_GRID = [5, 10, 25, 50, 100, 200, 400, 778]     # свип числа признаков (e3)
 ALPHA = 0.05                       # уровень значимости (FDR)
+
+# ---------- Раздел E: временные бины и честная оценка ----------
+# Базовый признак — один счётчик спайков в окне; он теряет временную структуру
+# отклика. Раскладываем окно на бины и получаем признаки [нейроны × бины].
+# Конфигурация с одним бином возвращает исходный счётчик, поэтому «сумма» и
+# «бины» сравниваются в абсолютно одинаковом протоколе оценки.
+HONEST_WINDOW_S = MAIN_WINDOW_S
+BIN_CONFIGS = {"sum_1bin": 1, "bins_100ms": 4, "bins_50ms": 8, "bins_20ms": 20}
+TOP_K_HONEST = [10, 25, 50, 100, 200]   # сколько нейронов оставить (отбор внутри CV)
+SHRINKAGE_HONEST = ["auto", 0.5, 0.9]
+# Число отобранных признаков = top_k × число бинов. LDA с shrinkage решает систему
+# размера (число признаков), поэтому при 4000 признаках один фит занимает ~25 с
+# (замер: 800 → 0.33 с, 1600 → 1.7 с, 4000 → 25 с). Ограничиваем бюджет признаков,
+# обрезая сетку top_k для конфигураций с крупным числом бинов.
+MAX_SELECTED_FEATURES = 1200
+N_REPEATS = 10                     # повторов в RepeatedStratifiedKFold (5×10 = 50 фолдов)
+N_PERMUTATIONS = 1000              # перестановок в permutation-тесте
 
 # Выравнивание спайков: к какому событию испытания привязано окно.
 # Сенсорное решение (сторона стимула) — к моменту предъявления стимула;
@@ -543,11 +581,195 @@ def plot_pca(pcs, y):
 
 
 # ======================================================================
+# e6 — временные бины и честная оценка (nested CV, repeated CV, permutation)
+# ======================================================================
+def binned_feature_matrix(spike_times, onsets, window_s, n_bins):
+    """Признаки [испытания × (нейроны × бины)] — спайки, разложенные по бинам.
+
+    n_bins=1 возвращает обычный счётчик спайков в окне, поэтому сумму и
+    временные бины можно сравнивать в одном протоколе. Для каждого нейрона
+    вместо цикла по испытаниям считаем относительные времена всех спайков
+    сразу и раскладываем их по бинам через np.add.at.
+    """
+    onsets = np.asarray(onsets, dtype=float)
+    bin_s = window_s / n_bins
+    T = len(onsets)
+    X = np.zeros((T, len(spike_times) * n_bins), dtype=np.float32)
+    for u, spk in enumerate(spike_times):
+        if spk.size == 0:
+            continue
+        rel = spk[:, None] - onsets[None, :]          # [спайки × испытания]
+        m = (rel >= 0.0) & (rel < window_s)
+        r, c = np.nonzero(m)
+        if r.size == 0:
+            continue
+        b = np.minimum((rel[r, c] / bin_s).astype(np.int32), n_bins - 1)
+        hist = np.zeros((T, n_bins), dtype=np.float32)
+        np.add.at(hist, (c, b), 1.0)
+        X[:, u * n_bins:(u + 1) * n_bins] = hist
+    return X
+
+
+class UnitBandSelector(BaseEstimator, TransformerMixin):
+    """Отбор нейронов по ANOVA F, посчитанной только на обучающей части фолда.
+
+    Признаки разложены как [нейроны × бины]. Селектор суммирует бины, считает
+    F-значение по каждому нейрону и оставляет бины top_k лучших. Отбор живёт
+    внутри пайплайна, поэтому утечки из тестовой части не происходит (в отличие
+    от отбора нейронов на всём наборе до кросс-валидации).
+    """
+
+    def __init__(self, n_units, n_bins, top_k=50):
+        self.n_units = n_units
+        self.n_bins = n_bins
+        self.top_k = top_k
+
+    def fit(self, X, y):
+        counts = np.asarray(X).reshape(len(X), self.n_units, self.n_bins).sum(axis=2)
+        # Константные нейроны (нет спайков в окне) дают F=NaN — считаем их
+        # отдельно, чтобы не делить на нулевую внутриклассовую дисперсию.
+        f_val = np.zeros(self.n_units, dtype=float)
+        keep = counts.std(axis=0) > 0
+        if keep.any():
+            f_keep, _ = f_classif(counts[:, keep], y)
+            f_val[keep] = np.nan_to_num(f_keep, nan=0.0, posinf=0.0, neginf=0.0)
+        k = min(int(self.top_k), self.n_units)
+        self.idx_ = np.argsort(f_val)[::-1][:k]
+        return self
+
+    def transform(self, X):
+        Xr = np.asarray(X).reshape(len(X), self.n_units, self.n_bins)
+        return Xr[:, self.idx_, :].reshape(len(X), -1)
+
+
+def binned_pipeline(n_units, n_bins, top_k, shrinkage="auto"):
+    """Пайплайн: отбор нейронов (внутри CV) → стандартизация → LDA."""
+    return Pipeline([
+        ("units", UnitBandSelector(n_units, n_bins, top_k=top_k)),
+        ("scaler", StandardScaler()),
+        ("clf", LinearDiscriminantAnalysis(solver="lsqr", shrinkage=shrinkage)),
+    ])
+
+
+def build_binned_features(spike_times, onsets, n_units):
+    """Словарь конфигураций признаков: имя → (матрица, число бинов)."""
+    out = {}
+    for cname, n_bins in BIN_CONFIGS.items():
+        X = binned_feature_matrix(spike_times, onsets, HONEST_WINDOW_S, n_bins)
+        out[cname] = {"X": X, "n_bins": n_bins}
+    assert all(v["X"].shape[1] == n_units * v["n_bins"] for v in out.values())
+    return out
+
+
+def experiment_nested_cv(binned_data, n_units, y):
+    """Честная оценка: внешний CV измеряет точность, внутренний подбирает параметры.
+
+    Одним и тем же протоколом оцениваются все конфигурации признаков, поэтому
+    сравнивать «сумму» и «бины» корректно. Каждый внешний фолд даёт свою точку —
+    по ним видно разброс, а не только среднее.
+    """
+    inner = StratifiedKFold(n_splits=N_SPLITS, shuffle=True, random_state=0)
+    outer = StratifiedKFold(n_splits=N_SPLITS, shuffle=True, random_state=1)
+    rows = []
+    for cname, cfg in binned_data.items():
+        X, n_bins = cfg["X"], cfg["n_bins"]
+        # Бюджет признаков: отбор нейронов ограничен так, чтобы выбранных
+        # признаков (top_k × бины) было не больше MAX_SELECTED_FEATURES.
+        top_k_grid = [k for k in TOP_K_HONEST if k * n_bins <= MAX_SELECTED_FEATURES]
+        if not top_k_grid:
+            top_k_grid = [TOP_K_HONEST[0]]
+        grid = {"units__top_k": top_k_grid, "clf__shrinkage": SHRINKAGE_HONEST}
+        gs = GridSearchCV(binned_pipeline(n_units, n_bins, top_k=top_k_grid[0]),
+                          grid, scoring="balanced_accuracy", cv=inner, n_jobs=1)
+        for fold, (tr, te) in enumerate(outer.split(X, y)):
+            gs.fit(X[tr], y[tr])
+            pred = gs.predict(X[te])
+            rows.append({
+                "feature_config": cname, "n_bins": n_bins,
+                "n_features": int(X.shape[1]), "fold": fold,
+                "accuracy": float(accuracy_score(y[te], pred)),
+                "balanced_accuracy": float(balanced_accuracy_score(y[te], pred)),
+                "n_selected_features": int(gs.best_params_["units__top_k"] * n_bins),
+                "best_params": json.dumps(gs.best_params_),
+            })
+        sub = [r for r in rows if r["feature_config"] == cname]
+        print(f"  {cname:<12} nested CV bacc={np.mean([r['balanced_accuracy'] for r in sub])*100:5.2f}% "
+              f"(±{np.std([r['balanced_accuracy'] for r in sub])*100:.2f})")
+    return pd.DataFrame(rows)
+
+
+def experiment_repeated_cv(X, n_units, n_bins, top_k, y):
+    """RepeatedStratifiedKFold: разброс точности по 5×N_REPEATS фолдам.
+
+    Один прогон 5-кратной CV давал std ±5–8%; 50 фолдов дают устойчивую оценку,
+    по которой видно, насколько вывод вообще воспроизводим.
+    """
+    cv = RepeatedStratifiedKFold(n_splits=N_SPLITS, n_repeats=N_REPEATS,
+                                 random_state=RANDOM_STATE)
+    pipe = binned_pipeline(n_units, n_bins, top_k=top_k)
+    res = cross_val_score(pipe, X, y, cv=cv, scoring="balanced_accuracy", n_jobs=1)
+    print(f"  repeated CV (5×{N_REPEATS}): bacc={res.mean()*100:5.2f}% ± {res.std()*100:.2f}")
+    return res
+
+
+def experiment_permutation(X, n_units, n_bins, top_k, y):
+    """Permutation-тест: нулевое распределение точности при перемешанных метках.
+
+    Даёт p-значение «выше случая» вместо простого сравнения со уровнем случая:
+    точность может быть выше случайной и при этом незначимой на 200 испытаниях.
+    """
+    cv = StratifiedKFold(n_splits=N_SPLITS, shuffle=True, random_state=RANDOM_STATE)
+    pipe = binned_pipeline(n_units, n_bins, top_k=top_k)
+    acc, perm_scores, p_value = permutation_test_score(
+        pipe, X, y, cv=cv, scoring="balanced_accuracy",
+        n_permutations=N_PERMUTATIONS, n_jobs=1, random_state=RANDOM_STATE)
+    print(f"  permutation: observed={acc*100:5.2f}%  null={perm_scores.mean()*100:5.2f}%  p={p_value:.4f}")
+    return float(acc), np.asarray(perm_scores), float(p_value)
+
+
+def plot_honest_evaluation(nested_df, rep_scores, perm_scores, perm_acc, perm_p, chance):
+    """Две панели: (1) nested CV по конфигурациям признаков, (2) permutation-нуль."""
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(13.5, 5.2))
+
+    stats = nested_df.groupby("feature_config")["balanced_accuracy"].agg(["mean", "std", "min", "max"])
+    stats = stats.sort_values("mean")
+    ax1.barh(stats.index, stats["mean"] * 100, xerr=stats["std"] * 100,
+             color=plt.cm.viridis(np.linspace(0.2, 0.85, len(stats))), capsize=4)
+    ax1.axvline(chance * 100, color="crimson", ls="--", lw=1.2,
+                label=f"уровень случая {chance*100:.1f}%")
+    ax1.set_xlabel("Balanced accuracy, %")
+    ax1.set_title("Честная оценка признаков (nested CV)\n"
+                  "отбор нейронов и shrinkage — внутри кросс-валидации")
+    ax1.set_xlim(0, 100)
+    ax1.legend(fontsize=8)
+    ax1.grid(axis="x", alpha=0.3)
+
+    ax2.hist(perm_scores * 100, bins=40, color="#94a3b8", edgecolor="none",
+             label=f"нуль по {len(perm_scores)} перестановкам")
+    ax2.axvline(perm_acc * 100, color="#dc2626", lw=2, label=f"наблюдаемая {perm_acc*100:.1f}%")
+    ax2.axvline(chance * 100, color="crimson", ls="--", lw=1.2, label=f"случай {chance*100:.1f}%")
+    ax2.set_xlabel("Balanced accuracy, %")
+    ax2.set_ylabel("Число перестановок")
+    ax2.set_title(f"Permutation-тест: p = {perm_p:.4f}")
+    ax2.legend(fontsize=8)
+    ax2.grid(alpha=0.3)
+
+    fig.tight_layout()
+    path = OUTPUT_DIR / "ai_honest_evaluation.png"
+    fig.savefig(str(path), dpi=110)
+    plt.close(fig)
+    return path
+
+
+# ======================================================================
 # Оркестрация
 # ======================================================================
-def main():
+def main(sections=None):
+    """Прогон разделов A–E. sections — подмножество {'A','B','C','D','E'} (по умолчанию все)."""
+    run = set(sections) if sections else {"A", "B", "C", "D", "E"}
     print("=" * 72)
     print("NeuroMouse — эксперименты и ИИ (расширенный анализ декодирования)")
+    print(f"Разделы: {', '.join(sorted(run))}")
     print("=" * 72)
 
     session = load_session()
@@ -581,60 +803,129 @@ def main():
     }
 
     # --- e2 ---
-    print("\n[A] Сравнение моделей (5-кратная CV) ...")
-    cmp_df = experiment_model_comparison(targets, spike_times)
-    cmp_df.to_csv(OUTPUT_DIR / "ai_model_comparison.csv", index=False)
-    plot_model_comparison(cmp_df)
-    best = cmp_df.loc[cmp_df["accuracy_mean"].idxmax()]
-    summary["best_model_accuracy"] = {
-        "target": best["target"], "model": best["model"],
-        "accuracy": float(best["accuracy_mean"]),
-    }
-
-    # --- e3 ---
-    print("\n[B] Гиперпараметры и отбор признаков (цель — сторона стимула) ...")
-    m = targets["stimulus"]["mask"]
-    X_stim = spike_count_matrix(spike_times, targets["stimulus"]["onsets"][m], MAIN_WINDOW_S)
-    y_stim = targets["stimulus"]["y"][m]
-    hp_df = experiment_hyperparameters(X_stim, y_stim)
-    hp_df.to_csv(OUTPUT_DIR / "ai_hyperparam_search.csv", index=False)
-    fs_df, scores_df = experiment_feature_selection(X_stim, y_stim)
-    fs_df.to_csv(OUTPUT_DIR / "ai_feature_selection.csv", index=False)
-    scores_df.to_csv(OUTPUT_DIR / "ai_feature_scores.csv", index=False)
-    plot_feature_selection(fs_df)
-    summary["best_hyperparameters"] = hp_df.set_index("model")["best_params"].to_dict()
-
-    # --- e4 ---
-    print("\n[C] Свип окна и целевой переменной ...")
-    ws_df = experiment_window_sweep(targets, spike_times)
-    ws_df.to_csv(OUTPUT_DIR / "ai_window_sweep.csv", index=False)
-    plot_window_sweep(ws_df)
-    for tname in targets:
-        sub = ws_df[ws_df["target"] == tname]
-        b = sub.loc[sub["accuracy_mean"].idxmax()]
-        summary[f"best_window_{tname}"] = {
-            "window_ms": int(b["window_ms"]), "model": b["model"],
-            "accuracy": float(b["accuracy_mean"]),
+    if "A" in run:
+        print("\n[A] Сравнение моделей (5-кратная CV) ...")
+        cmp_df = experiment_model_comparison(targets, spike_times)
+        cmp_df.to_csv(OUTPUT_DIR / "ai_model_comparison.csv", index=False)
+        plot_model_comparison(cmp_df)
+        best = cmp_df.loc[cmp_df["accuracy_mean"].idxmax()]
+        summary["best_model_accuracy"] = {
+            "target": best["target"], "model": best["model"],
+            "accuracy": float(best["accuracy_mean"]),
         }
 
-    # --- e5 ---
-    print("\n[D] Углублённый анализ юнитов (FDR, структуры, PCA) ...")
-    unit_df, region_df, pcs, y_pca = experiment_unit_analysis(
-        spike_times, session["regions"], targets, MAIN_WINDOW_S)
-    unit_df.to_csv(OUTPUT_DIR / "ai_unit_stats.csv", index=False)
-    region_df.to_csv(OUTPUT_DIR / "ai_region_stats.csv", index=False)
-    plot_unit_fdr(unit_df)
-    n_sig = int(unit_df["significant_fdr"].sum())
-    plot_pca(pcs, y_pca)
-    summary["unit_analysis"] = {
-        "n_units": int(len(unit_df)), "n_significant_fdr": n_sig,
-        "fraction_significant": float(unit_df["significant_fdr"].mean()),
-        "top_region": region_df.iloc[0]["region"] if len(region_df) else None,
-    }
-    print(f"Значимых юнитов (FDR q<0.05): {n_sig} из {len(unit_df)}")
+    # --- e3 ---
+    if "B" in run:
+        print("\n[B] Гиперпараметры и отбор признаков (цель — сторона стимула) ...")
+        m = targets["stimulus"]["mask"]
+        X_stim = spike_count_matrix(spike_times, targets["stimulus"]["onsets"][m], MAIN_WINDOW_S)
+        y_stim = targets["stimulus"]["y"][m]
+        hp_df = experiment_hyperparameters(X_stim, y_stim)
+        hp_df.to_csv(OUTPUT_DIR / "ai_hyperparam_search.csv", index=False)
+        fs_df, scores_df = experiment_feature_selection(X_stim, y_stim)
+        fs_df.to_csv(OUTPUT_DIR / "ai_feature_selection.csv", index=False)
+        scores_df.to_csv(OUTPUT_DIR / "ai_feature_scores.csv", index=False)
+        plot_feature_selection(fs_df)
+        summary["best_hyperparameters"] = hp_df.set_index("model")["best_params"].to_dict()
 
-    with open(OUTPUT_DIR / "ai_experiments_summary.json", "w", encoding="utf-8") as f:
-        json.dump(summary, f, ensure_ascii=False, indent=2)
+    # --- e4 ---
+    if "C" in run:
+        print("\n[C] Свип окна и целевой переменной ...")
+        ws_df = experiment_window_sweep(targets, spike_times)
+        ws_df.to_csv(OUTPUT_DIR / "ai_window_sweep.csv", index=False)
+        plot_window_sweep(ws_df)
+        for tname in targets:
+            sub = ws_df[ws_df["target"] == tname]
+            b = sub.loc[sub["accuracy_mean"].idxmax()]
+            summary[f"best_window_{tname}"] = {
+                "window_ms": int(b["window_ms"]), "model": b["model"],
+                "accuracy": float(b["accuracy_mean"]),
+            }
+
+    # --- e5 ---
+    if "D" in run:
+        print("\n[D] Углублённый анализ юнитов (FDR, структуры, PCA) ...")
+        unit_df, region_df, pcs, y_pca = experiment_unit_analysis(
+            spike_times, session["regions"], targets, MAIN_WINDOW_S)
+        unit_df.to_csv(OUTPUT_DIR / "ai_unit_stats.csv", index=False)
+        region_df.to_csv(OUTPUT_DIR / "ai_region_stats.csv", index=False)
+        plot_unit_fdr(unit_df)
+        n_sig = int(unit_df["significant_fdr"].sum())
+        plot_pca(pcs, y_pca)
+        summary["unit_analysis"] = {
+            "n_units": int(len(unit_df)), "n_significant_fdr": n_sig,
+            "fraction_significant": float(unit_df["significant_fdr"].mean()),
+            "top_region": region_df.iloc[0]["region"] if len(region_df) else None,
+        }
+        print(f"Значимых юнитов (FDR q<0.05): {n_sig} из {len(unit_df)}")
+
+    # --- e6: временные бины и честная оценка ---
+    if "E" in run:
+        print("\n[E] Временные бины и честная оценка (nested CV, repeated CV, permutation) ...")
+        m = targets["stimulus"]["mask"]
+        o_stim = targets["stimulus"]["onsets"][m]
+        y_stim = targets["stimulus"]["y"][m]
+        n_units = int(session["n_units"])
+        chance = float(max(np.bincount(y_stim)) / len(y_stim))
+
+        print("  построение признаков по бинам ...")
+        binned_data = build_binned_features(spike_times, o_stim, n_units)
+        for cname, cfg in binned_data.items():
+            print(f"    {cname:<12} {cfg['X'].shape[1]} признаков "
+                  f"({n_units} нейронов × {cfg['n_bins']} бин.)")
+
+        nested_df = experiment_nested_cv(binned_data, n_units, y_stim)
+        nested_df.to_csv(OUTPUT_DIR / "ai_nested_cv.csv", index=False)
+
+        # Лучшая конфигурация признаков — её и проверяем на устойчивость.
+        means = nested_df.groupby("feature_config")["balanced_accuracy"].mean()
+        best_cfg = means.idxmax()
+        best_params = json.loads(
+            nested_df[nested_df["feature_config"] == best_cfg].iloc[0]["best_params"])
+        top_k = int(best_params["units__top_k"])
+        n_bins = int(binned_data[best_cfg]["n_bins"])
+        X_best = binned_data[best_cfg]["X"]
+        print(f"  лучшая конфигурация: {best_cfg} (top_k={top_k}), "
+              f"nested CV bacc={means.max()*100:.2f}%")
+
+        rep_scores = experiment_repeated_cv(X_best, n_units, n_bins, top_k, y_stim)
+        pd.DataFrame({"balanced_accuracy": rep_scores}).to_csv(
+            OUTPUT_DIR / "ai_repeated_cv.csv", index=False)
+
+        perm_acc, perm_scores, perm_p = experiment_permutation(
+            X_best, n_units, n_bins, top_k, y_stim)
+        np.save(OUTPUT_DIR / "ai_permutation_null.npy", perm_scores)
+        with open(OUTPUT_DIR / "ai_permutation.json", "w", encoding="utf-8") as f:
+            json.dump({
+                "feature_config": best_cfg, "top_k": top_k, "n_bins": n_bins,
+                "n_permutations": N_PERMUTATIONS, "chance_level": chance,
+                "observed_balanced_accuracy": perm_acc,
+                "null_mean": float(perm_scores.mean()),
+                "null_std": float(perm_scores.std()),
+                "p_value": perm_p,
+            }, f, ensure_ascii=False, indent=2)
+
+        plot_honest_evaluation(nested_df, rep_scores, perm_scores,
+                               perm_acc, perm_p, chance)
+        summary["honest_evaluation"] = {
+            "best_feature_config": str(best_cfg),
+            "best_top_k": top_k,
+            "nested_cv_balanced_accuracy": float(means.max()),
+            "repeated_cv_mean": float(rep_scores.mean()),
+            "repeated_cv_std": float(rep_scores.std()),
+            "permutation_observed": perm_acc,
+            "permutation_null_mean": float(perm_scores.mean()),
+            "permutation_p_value": perm_p,
+        }
+
+    path = OUTPUT_DIR / "ai_experiments_summary.json"
+    previous = {}
+    if path.exists():                       # не затирать результаты разделов, которые не запускались
+        with open(path, "r", encoding="utf-8") as f:
+            previous = json.load(f)
+    previous.update(summary)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(previous, f, ensure_ascii=False, indent=2)
 
     print("\n" + "=" * 72)
     print(f"Готово. Артефакты в: {OUTPUT_DIR}")
@@ -643,4 +934,7 @@ def main():
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    import sys
+
+    cli = [s.upper() for s in sys.argv[1:]]
+    raise SystemExit(main(cli if cli else None))

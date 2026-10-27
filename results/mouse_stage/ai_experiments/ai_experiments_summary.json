@@ -46,5 +46,15 @@
     "n_significant_fdr": 31,
     "fraction_significant": 0.03984575835475578,
     "top_region": "SCm"
+  },
+  "honest_evaluation": {
+    "best_feature_config": "bins_20ms",
+    "best_top_k": 10,
+    "nested_cv_balanced_accuracy": 0.8624094202898551,
+    "repeated_cv_mean": 0.8573188405797103,
+    "repeated_cv_std": 0.05490266001542717,
+    "permutation_observed": 0.8570652173913045,
+    "permutation_null_mean": 0.4987366847826087,
+    "permutation_p_value": 0.000999000999000999
   }
 }

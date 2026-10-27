@@ -1,0 +1,11 @@
+{
+  "feature_config": "bins_20ms",
+  "top_k": 10,
+  "n_bins": 20,
+  "n_permutations": 1000,
+  "chance_level": 0.5918367346938775,
+  "observed_balanced_accuracy": 0.8570652173913045,
+  "null_mean": 0.4987366847826087,
+  "null_std": 0.04025060057746278,
+  "p_value": 0.000999000999000999
+}
