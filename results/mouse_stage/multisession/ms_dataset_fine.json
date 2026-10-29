@@ -1,0 +1,35 @@
+{
+  "stimulus": {
+    "n_sessions": 39,
+    "n_subjects": 10,
+    "n_trials": 6729,
+    "n_features": 740,
+    "n_regions": 74,
+    "class_balance": [
+      3441,
+      3288
+    ]
+  },
+  "choice": {
+    "n_sessions": 39,
+    "n_subjects": 10,
+    "n_trials": 6745,
+    "n_features": 740,
+    "n_regions": 74,
+    "class_balance": [
+      3373,
+      3372
+    ]
+  },
+  "feedback": {
+    "n_sessions": 39,
+    "n_subjects": 10,
+    "n_trials": 10050,
+    "n_features": 740,
+    "n_regions": 74,
+    "class_balance": [
+      3127,
+      6923
+    ]
+  }
+}
