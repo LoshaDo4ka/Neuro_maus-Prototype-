@@ -40,7 +40,10 @@ NeuroMouse — мульти-сессионный декодер (Stage III-B): �
   train       — собирает пул и считает три схемы оценки для каждой цели:
                 • pooled        — StratifiedKFold на объединённых испытаниях;
                 • cross-session — LeaveOneGroupOut по сессиям (обобщение на сессию);
-                • cross-subject — LeaveOneGroupOut по мышам (обобщение на мышь).
+                • cross-subject — LeaveOneGroupOut по мышам (обобщение на мышь);
+  perm        — permutation-тест значимости ПЕРЕНОСА: перемешивает метки и строит
+                нулевое распределение balanced accuracy для cross-session и
+                cross-subject, даёт p-значение «перенос значимо выше случая».
 
 Метрики: accuracy, balanced_accuracy, f1 (среднее ± std по фолдам). Дополнительно
 печатается уровень случая (доля мажоритарного класса).
@@ -50,12 +53,14 @@ NeuroMouse — мульти-сессионный декодер (Stage III-B): �
   cache/<сессия>_w<окно>_b<бины>.npz — кэш признаков одной сессии
   ms_dataset.json                    — состав пула (сессии, мыши, испытания)
   ms_performance.csv / .png          — точность по схемам оценки и моделям
+  ms_significance.csv                — permutation-тест переноса (p-значения)
   ms_progress.json                   — сколько сессий уже извлечено
 
 Запуск из корня проекта (окружение neuromouse):
     python -m src.mouse_multisession_decoder remote     # по одной сессии на мышь (HTTP)
     python -m src.mouse_multisession_decoder remote-all # все 39 сессий (HTTP)
     python -m src.mouse_multisession_decoder train      # обучение на пуле сессий
+    python -m src.mouse_multisession_decoder perm       # значимость переноса (permutation)
     python -m src.mouse_multisession_decoder plot       # график точности
     python -m src.mouse_multisession_decoder all        # remote + train + plot
     python -m src.mouse_multisession_decoder download   # полная выкачка NWB (~15 ГБ, резерв)
@@ -94,7 +99,12 @@ import pynwb
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.ensemble import HistGradientBoostingClassifier
 from sklearn.linear_model import LogisticRegression
-from sklearn.model_selection import LeaveOneGroupOut, StratifiedKFold, cross_validate
+from sklearn.model_selection import (
+    LeaveOneGroupOut,
+    StratifiedKFold,
+    cross_validate,
+    permutation_test_score,
+)
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
@@ -137,6 +147,14 @@ WINDOW_S = 1.0                                  # окно после событ
 N_BINS = 10                                     # бинов в окне (по 100 мс)
 MIN_TRIALS_VALID = 30                           # сессию с меньшим числом испытаний пропускаем
 POOLED_SPLITS = 5
+
+# Permutation-тест переноса (e8): метки перемешиваются, заново прогоняется
+# grouped-CV, строится нулевое распределение. Проверяем только схемы ПЕРЕНОСА
+# (cross-session / cross-subject) — именно они дают «честную» оценку. Модель —
+# основная (LDA); число перестановок 1000, как в e6.
+N_PERMUTATIONS = 1000
+PERM_SCHEMES = ("cross-session", "cross-subject")
+PERM_MODEL = "LDA"
 
 # Выравнивание к событию испытания (как в mouse_ai_experiments).
 ALIGNMENT_COLUMNS = {
@@ -703,6 +721,48 @@ def evaluate_target(target, data, schemes=("pooled", "cross-session", "cross-sub
     return rows
 
 
+def permutation_significance(target, data, schemes=PERM_SCHEMES,
+                             model_name=PERM_MODEL, n_permutations=N_PERMUTATIONS):
+    """Permutation-тест переноса: перемешать метки → нулевое распределение.
+
+    Отвечает на вопрос «точность на новой сессии/мыши выше, чем можно получить
+    случайно?». Метки y перемешиваются n_permutations раз, каждый раз заново
+    прогоняется тот же grouped-CV; p = (число нулевых ≥ наблюдённого + 1)/(n+1).
+    """
+    X, y = data["X"], data["y"]
+    ses, sub = data["session"], data["subject"]
+    model = make_models()[model_name]
+
+    cv_map = {}
+    if "cross-session" in schemes and len(set(ses)) > 1:
+        cv_map["cross-session"] = ses
+    if "cross-subject" in schemes and len(set(sub)) > 1:
+        cv_map["cross-subject"] = sub
+
+    rows = []
+    for sname, groups in cv_map.items():
+        score, perm, p = permutation_test_score(
+            model, X, y, groups=groups, cv=LeaveOneGroupOut(),
+            scoring="balanced_accuracy", n_permutations=n_permutations,
+            random_state=RANDOM_STATE, n_jobs=1,      # Windows: joblib дороже самого фита
+        )
+        rows.append({
+            "target": target, "scheme": sname, "model": model_name,
+            "n_samples": int(len(y)), "n_features": int(X.shape[1]),
+            "n_groups": int(len(set(groups))),
+            "score": float(score),
+            "null_mean": float(np.mean(perm)),
+            "null_std": float(np.std(perm)),
+            "null_p95": float(np.percentile(perm, 95)),
+            "p_value": float(p),
+            "n_permutations": int(n_permutations),
+        })
+        print(f"  [{target:<8}|{sname:<13}] {model_name:<8} bacc={score * 100:5.2f}%  "
+              f"нуль={np.mean(perm) * 100:5.2f}±{np.std(perm) * 100:.2f}%  "
+              f"p={p:.4f} (n={n_permutations})", flush=True)
+    return rows
+
+
 def plot_performance(df):
     """Столбики balanced accuracy по (цель × схема × модель)."""
     fig, axes = plt.subplots(1, len(df["target"].unique()), figsize=(5 * df["target"].nunique(), 4.2),
@@ -795,6 +855,25 @@ def main(sections=None):
             (OUTPUT_DIR / "ms_dataset.json").write_text(
                 json.dumps(dataset_info, ensure_ascii=False, indent=2), encoding="utf-8")
             print(f"\nСохранено: {OUTPUT_DIR / 'ms_performance.csv'}")
+
+    if "perm" in sections:
+        print("\n" + "=" * 72)
+        print("Мульти-сессионный декодер: permutation-тест переноса (значимость)")
+        print("=" * 72)
+        print(f"Перестановок: {N_PERMUTATIONS}, модель: {PERM_MODEL}, "
+              f"схемы: {', '.join(PERM_SCHEMES)}")
+        rows = []
+        for target in ALIGNMENT_COLUMNS:
+            try:
+                data = build_dataset(target)
+            except SystemExit as exc:
+                print(f"  [{target}] пропуск: {exc}")
+                continue
+            rows += permutation_significance(target, data)
+        if rows:
+            df = pd.DataFrame(rows)
+            df.to_csv(OUTPUT_DIR / "ms_significance.csv", index=False)
+            print(f"\nСохранено: {OUTPUT_DIR / 'ms_significance.csv'}")
 
     if "plot" in sections:
         csv = OUTPUT_DIR / "ms_performance.csv"
